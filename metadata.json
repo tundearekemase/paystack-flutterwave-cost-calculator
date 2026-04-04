@@ -1,0 +1,5 @@
+{
+  "name": "Levytate Payment Calculator",
+  "description": "A dynamic calculator comparing marketplace payment processing fees between Paystack and Flutterwave.",
+  "requestFramePermissions": []
+}
