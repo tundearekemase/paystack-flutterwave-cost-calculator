@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Calculator, Info, Settings2, CreditCard, Wallet, Receipt } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calculator, Info, Settings2, CreditCard, Wallet, Receipt, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const formatNGN = (num: number) => {
@@ -21,13 +21,6 @@ export default function App() {
     users: 1000,
     txnsPerWeek: 3,
     weeksPerMonth: 4.33,
-    tier1Max: 5000,
-    tier1Fee: 10,
-    tier2Max: 50000,
-    tier2Fee: 25,
-    tier3Fee: 50,
-    stampDutyThreshold: 10000,
-    stampDutyAmount: 50,
     paystackPercentage: 1.5,
     paystackCap: 2000,
     paystackFlatThreshold: 2500,
@@ -37,6 +30,7 @@ export default function App() {
   });
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [feeBearer, setFeeBearer] = useState<'merchant' | 'customer'>('merchant');
 
   const updateInput = (key: keyof typeof inputs, value: number) => {
     setInputs(prev => ({ ...prev, [key]: value || 0 }));
@@ -45,19 +39,68 @@ export default function App() {
   // Calculations
   const totalMonthlyTxns = inputs.users * inputs.txnsPerWeek * inputs.weeksPerMonth;
 
-  const transferFee = inputs.price <= inputs.tier1Max 
-    ? inputs.tier1Fee 
-    : (inputs.price <= inputs.tier2Max ? inputs.tier2Fee : inputs.tier3Fee);
-
-  const stampDuty = inputs.price >= inputs.stampDutyThreshold ? inputs.stampDutyAmount : 0;
-
-  const paystackPercentageFee = Math.min(inputs.price * (inputs.paystackPercentage / 100), inputs.paystackCap);
+  // --- Paystack ---
+  const paystackDecimalRate = inputs.paystackPercentage / 100;
   const paystackFlatFee = inputs.price >= inputs.paystackFlatThreshold ? inputs.paystackFlatAmount : 0;
-  const paystackTotalPerTxn = paystackPercentageFee + paystackFlatFee + transferFee + stampDuty;
+
+  let paystackProcessingFee: number;
+  let paystackChargeAmount: number;
+  let paystackFeeAdded: number;
+
+  if (feeBearer === 'merchant') {
+    // Merchant absorbs: fee is taken from the sale price
+    const calculatedFee = inputs.price * paystackDecimalRate + paystackFlatFee;
+    paystackProcessingFee = Math.min(calculatedFee, inputs.paystackCap);
+    paystackChargeAmount = inputs.price;
+    paystackFeeAdded = 0;
+  } else {
+    // Customer pays: calculate what to charge so merchant receives exactly inputs.price
+    // Formula: chargeAmount = (price + flatFee) / (1 - rate)
+    // Then cap the fee at inputs.paystackCap
+    const uncappedCharge = (inputs.price + paystackFlatFee) / (1 - paystackDecimalRate);
+    const uncappedFee = uncappedCharge - inputs.price;
+
+    if (uncappedFee > inputs.paystackCap) {
+      // Fee would exceed cap, so charge = price + cap
+      paystackProcessingFee = inputs.paystackCap;
+      paystackChargeAmount = inputs.price + inputs.paystackCap;
+    } else {
+      paystackProcessingFee = Math.round(uncappedFee * 100) / 100;
+      paystackChargeAmount = Math.round(uncappedCharge * 100) / 100;
+    }
+    paystackFeeAdded = paystackChargeAmount - inputs.price;
+  }
+
+  const paystackTotalPerTxn = paystackProcessingFee;
   const paystackMonthlyCost = paystackTotalPerTxn * totalMonthlyTxns;
 
-  const flutterwavePercentageFee = Math.min(inputs.price * (inputs.flutterwavePercentage / 100), inputs.flutterwaveCap);
-  const flutterwaveTotalPerTxn = flutterwavePercentageFee + transferFee + stampDuty;
+  // --- Flutterwave ---
+  const flutterwaveDecimalRate = inputs.flutterwavePercentage / 100;
+
+  let flutterwaveProcessingFee: number;
+  let flutterwaveChargeAmount: number;
+  let flutterwaveFeeAdded: number;
+
+  if (feeBearer === 'merchant') {
+    const calculatedFee = inputs.price * flutterwaveDecimalRate;
+    flutterwaveProcessingFee = Math.min(calculatedFee, inputs.flutterwaveCap);
+    flutterwaveChargeAmount = inputs.price;
+    flutterwaveFeeAdded = 0;
+  } else {
+    const uncappedCharge = inputs.price / (1 - flutterwaveDecimalRate);
+    const uncappedFee = uncappedCharge - inputs.price;
+
+    if (uncappedFee > inputs.flutterwaveCap) {
+      flutterwaveProcessingFee = inputs.flutterwaveCap;
+      flutterwaveChargeAmount = inputs.price + inputs.flutterwaveCap;
+    } else {
+      flutterwaveProcessingFee = Math.round(uncappedFee * 100) / 100;
+      flutterwaveChargeAmount = Math.round(uncappedCharge * 100) / 100;
+    }
+    flutterwaveFeeAdded = flutterwaveChargeAmount - inputs.price;
+  }
+
+  const flutterwaveTotalPerTxn = flutterwaveProcessingFee;
   const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
 
   return (
@@ -114,6 +157,38 @@ export default function App() {
                     value={inputs.txnsPerWeek} 
                     onChange={(v) => updateInput('txnsPerWeek', v)} 
                   />
+
+                  {/* Fee Bearer Toggle */}
+                  <div className="flex flex-col space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Who pays the fees?</label>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm">
+                      <button
+                        onClick={() => setFeeBearer('merchant')}
+                        className={`flex-1 px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                          feeBearer === 'merchant'
+                            ? 'bg-gray-900 text-white shadow-inner'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Merchant absorbs
+                      </button>
+                      <button
+                        onClick={() => setFeeBearer('customer')}
+                        className={`flex-1 px-3 py-2.5 text-sm font-medium transition-all duration-200 border-l border-gray-300 ${
+                          feeBearer === 'customer'
+                            ? 'bg-gray-900 text-white shadow-inner'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Customer pays
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {feeBearer === 'merchant' 
+                        ? 'Transaction fees are deducted from your sale amount.' 
+                        : 'Transaction fees are added to the customer\'s checkout total.'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -145,27 +220,6 @@ export default function App() {
                             onChange={(v) => updateInput('weeksPerMonth', v)} 
                             step="0.01"
                           />
-                        </div>
-
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Bank Transfer Costs</h3>
-                          <div className="grid grid-cols-2 gap-4">
-                            <InputGroup label="Tier 1 Max" value={inputs.tier1Max} onChange={(v) => updateInput('tier1Max', v)} prefix="₦" />
-                            <InputGroup label="Tier 1 Fee" value={inputs.tier1Fee} onChange={(v) => updateInput('tier1Fee', v)} prefix="₦" />
-                            <InputGroup label="Tier 2 Max" value={inputs.tier2Max} onChange={(v) => updateInput('tier2Max', v)} prefix="₦" />
-                            <InputGroup label="Tier 2 Fee" value={inputs.tier2Fee} onChange={(v) => updateInput('tier2Fee', v)} prefix="₦" />
-                            <div className="col-span-2">
-                              <InputGroup label="Tier 3 Fee (Above Tier 2)" value={inputs.tier3Fee} onChange={(v) => updateInput('tier3Fee', v)} prefix="₦" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Government Stamp Charge</h3>
-                          <div className="grid grid-cols-2 gap-4">
-                            <InputGroup label="Applies above" value={inputs.stampDutyThreshold} onChange={(v) => updateInput('stampDutyThreshold', v)} prefix="₦" />
-                            <InputGroup label="Charge Amount" value={inputs.stampDutyAmount} onChange={(v) => updateInput('stampDutyAmount', v)} prefix="₦" />
-                          </div>
                         </div>
 
                         <div className="space-y-4">
@@ -209,7 +263,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-medium">What you'll pay each month</p>
+                    <p className="text-sm text-gray-500 font-medium">
+                      {feeBearer === 'merchant' ? 'What you\'ll pay each month' : 'Total fees charged to customers monthly'}
+                    </p>
                     <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatNGN(paystackMonthlyCost)}</p>
                   </div>
                 </div>
@@ -217,25 +273,47 @@ export default function App() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost per sale breakdown</h3>
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Processing Fee ({inputs.paystackPercentage}%)</span>
-                      <span className="font-medium">{formatNGN(paystackPercentageFee)}</span>
+                      <span className="text-gray-500">Processing ({inputs.paystackPercentage}% + flat)</span>
+                      <span className="font-medium">{formatNGN(paystackProcessingFee)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Flat Fee</span>
-                      <span className="font-medium">{formatNGN(paystackFlatFee)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Bank Transfer Cost</span>
-                      <span className="font-medium">{formatNGN(transferFee)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Govt Stamp Charge</span>
-                      <span className="font-medium">{formatNGN(stampDuty)}</span>
-                    </div>
+                    {paystackFlatFee > 0 && (
+                      <div className="flex justify-between text-gray-400 text-xs pl-3">
+                        <span>Includes ₦{inputs.paystackFlatAmount} flat fee (sale ≥ {formatNGN(inputs.paystackFlatThreshold)})</span>
+                      </div>
+                    )}
+                    {paystackProcessingFee >= inputs.paystackCap && (
+                      <div className="flex justify-between text-gray-400 text-xs pl-3">
+                        <span>Capped at {formatNGN(inputs.paystackCap)}</span>
+                      </div>
+                    )}
                     <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between font-semibold text-gray-900">
-                      <span>Total per sale</span>
+                      <span>Fee per sale</span>
                       <span>{formatNGN(paystackTotalPerTxn)}</span>
                     </div>
+                    {feeBearer === 'customer' && (
+                      <div className="pt-2 space-y-2">
+                        <div className="flex justify-between text-sky-700">
+                          <span className="font-medium">Customer is charged</span>
+                          <span className="font-bold">{formatNGN(paystackChargeAmount)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400 text-xs">
+                          <span>Fee added to checkout</span>
+                          <span>+{formatNGN(paystackFeeAdded)}</span>
+                        </div>
+                        <div className="flex justify-between text-green-700 text-xs">
+                          <span>You receive</span>
+                          <span className="font-medium">{formatNGN(inputs.price)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {feeBearer === 'merchant' && (
+                      <div className="pt-2">
+                        <div className="flex justify-between text-green-700 text-xs">
+                          <span>You receive per sale</span>
+                          <span className="font-medium">{formatNGN(inputs.price - paystackTotalPerTxn)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -252,7 +330,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-gray-500 font-medium">What you'll pay each month</p>
+                    <p className="text-sm text-gray-500 font-medium">
+                      {feeBearer === 'merchant' ? 'What you\'ll pay each month' : 'Total fees charged to customers monthly'}
+                    </p>
                     <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatNGN(flutterwaveMonthlyCost)}</p>
                   </div>
                 </div>
@@ -260,25 +340,42 @@ export default function App() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost per sale breakdown</h3>
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Processing Fee ({inputs.flutterwavePercentage}%)</span>
-                      <span className="font-medium">{formatNGN(flutterwavePercentageFee)}</span>
+                      <span className="text-gray-500">Processing ({inputs.flutterwavePercentage}%)</span>
+                      <span className="font-medium">{formatNGN(flutterwaveProcessingFee)}</span>
                     </div>
-                    <div className="flex justify-between text-gray-400">
-                      <span>Flat Fee</span>
-                      <span>-</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Bank Transfer Cost</span>
-                      <span className="font-medium">{formatNGN(transferFee)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Govt Stamp Charge</span>
-                      <span className="font-medium">{formatNGN(stampDuty)}</span>
-                    </div>
+                    {flutterwaveProcessingFee >= inputs.flutterwaveCap && (
+                      <div className="flex justify-between text-gray-400 text-xs pl-3">
+                        <span>Capped at {formatNGN(inputs.flutterwaveCap)}</span>
+                      </div>
+                    )}
                     <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between font-semibold text-gray-900">
-                      <span>Total per sale</span>
+                      <span>Fee per sale</span>
                       <span>{formatNGN(flutterwaveTotalPerTxn)}</span>
                     </div>
+                    {feeBearer === 'customer' && (
+                      <div className="pt-2 space-y-2">
+                        <div className="flex justify-between text-orange-700">
+                          <span className="font-medium">Customer is charged</span>
+                          <span className="font-bold">{formatNGN(flutterwaveChargeAmount)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400 text-xs">
+                          <span>Fee added to checkout</span>
+                          <span>+{formatNGN(flutterwaveFeeAdded)}</span>
+                        </div>
+                        <div className="flex justify-between text-green-700 text-xs">
+                          <span>You receive</span>
+                          <span className="font-medium">{formatNGN(inputs.price)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {feeBearer === 'merchant' && (
+                      <div className="pt-2">
+                        <div className="flex justify-between text-green-700 text-xs">
+                          <span>You receive per sale</span>
+                          <span className="font-medium">{formatNGN(inputs.price - flutterwaveTotalPerTxn)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -304,58 +401,84 @@ export default function App() {
                 </div>
 
                 <div>
-                  <div className="text-gray-500 mb-1">// 2. Shared Costs (Applied to both)</div>
-                  <div className="space-y-2">
-                    <div className="whitespace-nowrap">
-                      <span className="text-blue-400">Bank Transfer</span> = 
-                      {inputs.price <= inputs.tier1Max ? (
-                        <span> {formatNGN(inputs.price)} is ≤ {formatNGN(inputs.tier1Max)}</span>
-                      ) : inputs.price <= inputs.tier2Max ? (
-                        <span> {formatNGN(inputs.price)} is ≤ {formatNGN(inputs.tier2Max)}</span>
-                      ) : (
-                        <span> {formatNGN(inputs.price)} is &gt; {formatNGN(inputs.tier2Max)}</span>
-                      )}
-                      <span className="text-white ml-2">→ {formatNGN(transferFee)}</span>
+                  <div className="text-gray-500 mb-1">// 2. Fee Model: {feeBearer === 'merchant' ? 'Merchant Absorbs' : 'Customer Pays'}</div>
+                  {feeBearer === 'merchant' ? (
+                    <div className="text-gray-400">Fees are subtracted from your sale amount of {formatNGN(inputs.price)}.</div>
+                  ) : (
+                    <div className="text-gray-400">
+                      Fees are added to the checkout total using: <span className="text-green-400">(Price + Flat) / (1 - Rate)</span>
+                      <div className="text-gray-500 mt-1">This ensures you receive exactly {formatNGN(inputs.price)} after the gateway deducts its fee.</div>
                     </div>
-                    <div className="whitespace-nowrap">
-                      <span className="text-blue-400">Govt Stamp</span> = 
-                      <span> {formatNGN(inputs.price)} {inputs.price >= inputs.stampDutyThreshold ? '≥' : '<'} {formatNGN(inputs.stampDutyThreshold)}</span>
-                      <span className="text-white ml-2">→ {formatNGN(stampDuty)}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-800">
                   <div className="space-y-2">
                     <div className="text-sky-400 font-semibold mb-2">Paystack Math</div>
-                    <div className="whitespace-nowrap">
-                      <span className="text-gray-400">Processing:</span> Min({formatNGN(inputs.price)} × {inputs.paystackPercentage}%, {formatNGN(inputs.paystackCap)})
-                      <div className="text-white">→ {formatNGN(paystackPercentageFee)}</div>
-                    </div>
-                    <div className="whitespace-nowrap">
-                      <span className="text-gray-400">Flat Fee:</span> {formatNGN(inputs.price)} {inputs.price >= inputs.paystackFlatThreshold ? '≥' : '<'} {formatNGN(inputs.paystackFlatThreshold)}
-                      <div className="text-white">→ {formatNGN(paystackFlatFee)}</div>
-                    </div>
-                    <div className="pt-2 whitespace-nowrap">
-                      <span className="text-gray-400">Total per sale:</span> {formatNGN(paystackPercentageFee)} + {formatNGN(paystackFlatFee)} + {formatNGN(transferFee)} + {formatNGN(stampDuty)}
-                      <div className="text-white font-bold">→ {formatNGN(paystackTotalPerTxn)}</div>
-                    </div>
+                    {feeBearer === 'merchant' ? (
+                      <>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Processing:</span> Min({formatNGN(inputs.price)} × {inputs.paystackPercentage}% + {formatNGN(paystackFlatFee)}, {formatNGN(inputs.paystackCap)})
+                          <div className="text-white">→ {formatNGN(paystackProcessingFee)}</div>
+                        </div>
+                        <div className="pt-2 whitespace-nowrap">
+                          <span className="text-gray-400">You receive:</span> {formatNGN(inputs.price)} − {formatNGN(paystackProcessingFee)}
+                          <div className="text-white font-bold">→ {formatNGN(inputs.price - paystackProcessingFee)}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Charge:</span> ({formatNGN(inputs.price)} + {formatNGN(paystackFlatFee)}) / (1 − {paystackDecimalRate})
+                          <div className="text-white">→ {formatNGN(paystackChargeAmount)}</div>
+                        </div>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Fee:</span> {formatNGN(paystackChargeAmount)} − {formatNGN(inputs.price)}
+                          <div className="text-white">→ {formatNGN(paystackProcessingFee)}</div>
+                        </div>
+                        {paystackProcessingFee >= inputs.paystackCap && (
+                          <div className="text-yellow-400 text-xs">⚠ Fee capped at {formatNGN(inputs.paystackCap)}</div>
+                        )}
+                        <div className="pt-2 whitespace-nowrap">
+                          <span className="text-gray-400">You receive:</span>
+                          <div className="text-green-400 font-bold">→ {formatNGN(inputs.price)} ✓</div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-2">
                     <div className="text-orange-400 font-semibold mb-2">Flutterwave Math</div>
-                    <div className="whitespace-nowrap">
-                      <span className="text-gray-400">Processing:</span> Min({formatNGN(inputs.price)} × {inputs.flutterwavePercentage}%, {formatNGN(inputs.flutterwaveCap)})
-                      <div className="text-white">→ {formatNGN(flutterwavePercentageFee)}</div>
-                    </div>
-                    <div className="whitespace-nowrap">
-                      <span className="text-gray-400">Flat Fee:</span> Not applicable
-                      <div className="text-white">→ ₦0.00</div>
-                    </div>
-                    <div className="pt-2 whitespace-nowrap">
-                      <span className="text-gray-400">Total per sale:</span> {formatNGN(flutterwavePercentageFee)} + ₦0.00 + {formatNGN(transferFee)} + {formatNGN(stampDuty)}
-                      <div className="text-white font-bold">→ {formatNGN(flutterwaveTotalPerTxn)}</div>
-                    </div>
+                    {feeBearer === 'merchant' ? (
+                      <>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Processing:</span> Min({formatNGN(inputs.price)} × {inputs.flutterwavePercentage}%, {formatNGN(inputs.flutterwaveCap)})
+                          <div className="text-white">→ {formatNGN(flutterwaveProcessingFee)}</div>
+                        </div>
+                        <div className="pt-2 whitespace-nowrap">
+                          <span className="text-gray-400">You receive:</span> {formatNGN(inputs.price)} − {formatNGN(flutterwaveProcessingFee)}
+                          <div className="text-white font-bold">→ {formatNGN(inputs.price - flutterwaveProcessingFee)}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Charge:</span> {formatNGN(inputs.price)} / (1 − {flutterwaveDecimalRate})
+                          <div className="text-white">→ {formatNGN(flutterwaveChargeAmount)}</div>
+                        </div>
+                        <div className="whitespace-nowrap">
+                          <span className="text-gray-400">Fee:</span> {formatNGN(flutterwaveChargeAmount)} − {formatNGN(inputs.price)}
+                          <div className="text-white">→ {formatNGN(flutterwaveProcessingFee)}</div>
+                        </div>
+                        {flutterwaveProcessingFee >= inputs.flutterwaveCap && (
+                          <div className="text-yellow-400 text-xs">⚠ Fee capped at {formatNGN(inputs.flutterwaveCap)}</div>
+                        )}
+                        <div className="pt-2 whitespace-nowrap">
+                          <span className="text-gray-400">You receive:</span>
+                          <div className="text-green-400 font-bold">→ {formatNGN(inputs.price)} ✓</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
