@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+@theme {
+  --color-secondary: #000;
+}
+
+@layer utilities {
+  .hide-arrows::-webkit-outer-spin-button,
+  .hide-arrows::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .hide-arrows {
+    -moz-appearance: textfield;
+  }
+}

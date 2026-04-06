@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Activity, Server, Cloud, Database, AlertCircle, Zap } from 'lucide-react';
+import { Settings2, Cloud, Database, AlertCircle, Zap, ToggleRight, ToggleLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGlobalStore } from '../store/useGlobalStore';
+import { SliderInput } from './ui/SliderInput';
 import { InputGroup } from './ui/InputGroup';
 import { Checkbox } from './ui/Checkbox';
 import { formatNum } from '../utils/formatters';
@@ -19,7 +20,7 @@ export default function CloudCalculator({ formatterUSD }: any) {
 
   // Local Overrides
   const [localUsers, setLocalUsers] = useState(1000);
-  const [localRequestsPerUserMonth, setLocalRequestsPerUserMonth] = useState(100);
+  const [localRequestsPerUserMonth, setLocalRequestsPerUserMonth] = useState(144);
   const [localFirestoreReadsReq, setLocalFirestoreReadsReq] = useState(3);
   const [localFirestoreWritesReq, setLocalFirestoreWritesReq] = useState(1);
 
@@ -146,213 +147,180 @@ export default function CloudCalculator({ formatterUSD }: any) {
   const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
 
   return (
-    <section>
-      <div className="mb-6 max-w-2xl">
-        <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">Backend Infrastructure Cost</h1>
-        <p className="text-gray-500 text-lg">Estimate your monthly cloud backend billing and database operations based on your user growth.</p>
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+      {/* Header */}
+      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+        <h2 className="text-lg font-bold tracking-tight text-gray-900">Backend Infrastructure</h2>
       </div>
 
-      <div className="flex flex-col space-y-3 max-w-sm mb-6">
-        <label className="text-sm font-semibold text-gray-900">Compute Backend Engine</label>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm p-1 bg-gray-100 gap-1 w-fit">
-          <button onClick={() => setComputeProvider('gcp')} className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${computeProvider === 'gcp' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-600 hover:text-gray-800'}`}>Google Cloud Run</button>
-          <button onClick={() => setComputeProvider('aws')} className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${computeProvider === 'aws' ? 'bg-white text-amber-600 shadow-sm font-bold border border-amber-100' : 'text-gray-600 hover:text-gray-800'}`}>AWS ECS Fargate</button>
+      <div className="p-5 space-y-6 flex-grow">
+        {/* Cloud Provider Selector */}
+        <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
+          <button 
+            onClick={() => setComputeProvider('gcp')} 
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${computeProvider === 'gcp' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Google Cloud Run
+          </button>
+          <button 
+            onClick={() => setComputeProvider('aws')} 
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${computeProvider === 'aws' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            AWS ECS Fargate
+          </button>
+        </div>
+
+        {/* Sync Controls */}
+        <div className="flex items-center justify-between mt-6 mb-2">
+          <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+            Traffic & Resources
+          </h3>
+          <button 
+            onClick={() => setUseGlobal(!useGlobal)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-indigo-600 transition-colors"
+          >
+            <span>Use Global</span>
+            {useGlobal ? <ToggleRight className="w-5 h-5 text-indigo-600" /> : <ToggleLeft className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {/* Sliders */}
+        <div className="space-y-1">
+          <SliderInput 
+            label="Active Customers/Mo" 
+            disabled={useGlobal} 
+            value={users} 
+            onChange={useGlobal ? () => {} : setLocalUsers} 
+            min={100} max={100000} step={100}
+          />
+          <SliderInput 
+            label="Requests per User/Month" 
+            disabled={useGlobal} 
+            value={requestsPerUserMonth} 
+            onChange={useGlobal ? () => {} : setLocalRequestsPerUserMonth} 
+            min={1} max={1000} step={1}
+          />
+
+          <div className="pt-2 text-xs text-gray-700 font-medium">
+            Total Monthly Requests: <span className="font-bold">{formatNum(totalMonthlyBackendReqs)}</span>
+          </div>
+
+          <div className="pt-2">
+             <SliderInput 
+                label="Avg Request Duration" 
+                value={inputs.backendRequestTimeMs} 
+                onChange={(v) => updateInput('backendRequestTimeMs', v)} 
+                min={10} max={5000} step={10}
+             />
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-6 space-y-6">
-              <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-gray-400" /> Traffic & Resources
-                </h2>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id="useGlobalCloud" checked={useGlobal} onChange={e => setUseGlobal(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"/>
-                  <label htmlFor="useGlobalCloud" className="text-xs font-medium text-gray-600">Use Global</label>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <InputGroup label="Active Customers / Mo" disabled={useGlobal} value={users} onChange={setLocalUsers} />
-                <InputGroup label="Requests per User/Month" disabled={useGlobal} value={requestsPerUserMonth} onChange={setLocalRequestsPerUserMonth} />
-                
-                <div className="pt-2 pb-2">
-                  <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 text-blue-500" />
-                    <div>Total Monthly Requests:<br/><span className="font-semibold text-lg">{formatNum(totalMonthlyBackendReqs)}</span></div>
-                  </div>
-                </div>
-                
-                <InputGroup label="Avg Request Duration" value={inputs.backendRequestTimeMs} onChange={(v) => updateInput('backendRequestTimeMs', v)} suffix="ms" />
-              </div>
-            </div>
-
-            <div className="border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setShowCloudAdvanced(!showCloudAdvanced)} className="w-full px-6 py-4 flex items-center justify-between text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">
-                <span className="flex items-center gap-2">
-                  <Server className="w-4 h-4" /> {computeProvider === 'gcp' ? 'GCP' : 'AWS'} Infra Settings
-                </span>
-                {showCloudAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-              <AnimatePresence>
-                {showCloudAdvanced && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                    <div className="px-6 pb-6 space-y-6 pt-2">
-                      {computeProvider === 'gcp' ? (
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-blue-800 border-b border-blue-100 pb-2 flex items-center gap-2"><Cloud className="w-4 h-4 text-blue-500" /> Cloud Run Instance</h3>
-                          <div className="grid grid-cols-2 gap-4">
-                            <InputGroup label="vCPU alloc." value={inputs.cloudRunVcpu} onChange={(v) => updateInput('cloudRunVcpu', v)} step="0.1" />
-                            <InputGroup label="Memory (GiB)" value={inputs.cloudRunMemGib} onChange={(v) => updateInput('cloudRunMemGib', v)} step="0.1" />
-                            <div className="col-span-2">
-                              <InputGroup label="Avg Concurrent Req" value={inputs.cloudRunConcurrency} onChange={(v) => updateInput('cloudRunConcurrency', v)} />
-                            </div>
-                            <div className="col-span-2 border-t border-gray-100 pt-3">
-                              <InputGroup label="Min Instances (Always On)" value={inputs.minInstances} onChange={(v) => updateInput('minInstances', v)} />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <h3 className="text-sm font-semibold text-amber-800 border-b border-amber-100 pb-2 flex items-center gap-2"><Cloud className="w-4 h-4 text-amber-500" /> ECS Task (Fargate)</h3>
-                          <div className="grid grid-cols-2 gap-4">
-                            <InputGroup label="vCPU alloc." value={inputs.ecsFargateVcpu} onChange={(v) => updateInput('ecsFargateVcpu', v)} step="0.25" />
-                            <InputGroup label="Memory (GB)" value={inputs.ecsFargateMemGb} onChange={(v) => updateInput('ecsFargateMemGb', v)} step="1" />
-                            <div className="col-span-2">
-                              <InputGroup label="Task Concurrency" value={inputs.ecsTaskConcurrencyLimit} onChange={(v) => updateInput('ecsTaskConcurrencyLimit', v)} />
-                            </div>
-                            <div className="col-span-2 border-t border-gray-100 pt-3">
-                              <InputGroup label="Min Tasks Default" value={inputs.ecsMinTasks} onChange={(v) => updateInput('ecsMinTasks', v)} />
-                            </div>
-                          </div>
-                          <div>
-                            <Checkbox label="Require VPC & NAT" checked={awsRequireVpcNat} onChange={setAwsRequireVpcNat} />
-                            <Checkbox label="Auto Deployments" checked={awsAutomatedDeployments} onChange={setAwsAutomatedDeployments} />
-                            <div className="pt-3">
-                              <InputGroup label="CloudWatch Logs Size" value={inputs.awsCloudWatchLogsGb} onChange={(v) => updateInput('awsCloudWatchLogsGb', v)} suffix="GB" />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-4 pt-4 border-t-2 border-dashed border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><Database className="w-4 h-4 text-gray-500" /> Firestore Tuning</h3>
-                        
-                        <div className="flex flex-col space-y-2 mb-3">
-                          <label className="text-sm text-gray-700 font-medium">Firestore Edition</label>
-                          <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm">
-                            <button onClick={() => setFirestoreEdition('standard')} className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-200 ${firestoreEdition === 'standard' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Standard</button>
-                            <button onClick={() => setFirestoreEdition('enterprise')} className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-200 border-l border-gray-300 ${firestoreEdition === 'enterprise' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Enterprise</button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <InputGroup label="Reads/Req" disabled={useGlobal} value={firestoreReadsReq} onChange={setLocalFirestoreReadsReq} step="1" />
-                          <InputGroup label="Writes/Req" disabled={useGlobal} value={firestoreWritesReq} onChange={setLocalFirestoreWritesReq} step="1" />
-                          <div className="col-span-2">
-                            <InputGroup label="Storage per User" value={inputs.firestoreStorageMb} onChange={(v) => updateInput('firestoreStorageMb', v)} step="0.1" suffix="MB" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
+      {/* Advanced Gateway Settings */}
+      <div className="border-y border-gray-100 bg-gray-50/50">
+        <button onClick={() => setShowCloudAdvanced(!showCloudAdvanced)} className="w-full px-5 py-3 flex items-center justify-between text-xs font-semibold text-gray-600 hover:text-gray-900 transition-colors">
+          <span className="flex items-center gap-1.5"><Settings2 className="w-3.5 h-3.5" /> Backend Options</span>
+        </button>
+        <AnimatePresence>
+          {showCloudAdvanced && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <div className="px-5 pb-5 pt-1 space-y-4">
+                 {computeProvider === 'gcp' ? (
+                   <div className="space-y-3">
+                     <h4 className="text-xs font-bold text-gray-800">Cloud Run Settings</h4>
+                     <div className="grid grid-cols-2 gap-3">
+                       <InputGroup label="vCPU alloc" value={inputs.cloudRunVcpu} onChange={(v) => updateInput('cloudRunVcpu', v)} step="0.1" />
+                       <InputGroup label="Mem (GiB)" value={inputs.cloudRunMemGib} onChange={(v) => updateInput('cloudRunMemGib', v)} step="0.1" />
+                       <InputGroup label="Avg Concurrency" value={inputs.cloudRunConcurrency} onChange={(v) => updateInput('cloudRunConcurrency', v)} />
+                       <InputGroup label="Min Instances" value={inputs.minInstances} onChange={(v) => updateInput('minInstances', v)} />
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="space-y-3">
+                     <h4 className="text-xs font-bold text-gray-800">AWS ECS Fargate Settings</h4>
+                     <div className="grid grid-cols-2 gap-3">
+                       <InputGroup label="vCPU alloc" value={inputs.ecsFargateVcpu} onChange={(v) => updateInput('ecsFargateVcpu', v)} step="0.25" />
+                       <InputGroup label="Mem (GB)" value={inputs.ecsFargateMemGb} onChange={(v) => updateInput('ecsFargateMemGb', v)} step="1" />
+                       <InputGroup label="Task Concurrency" value={inputs.ecsTaskConcurrencyLimit} onChange={(v) => updateInput('ecsTaskConcurrencyLimit', v)} />
+                       <InputGroup label="Min Tasks" value={inputs.ecsMinTasks} onChange={(v) => updateInput('ecsMinTasks', v)} />
+                     </div>
+                     <Checkbox label="Require VPC & NAT" checked={awsRequireVpcNat} onChange={setAwsRequireVpcNat} />
+                   </div>
                 )}
-              </AnimatePresence>
+                <div className="border-t border-gray-200 pt-3 space-y-3">
+                   <h4 className="text-xs font-bold text-gray-800">Firestore Settings</h4>
+                   <div className="flex rounded border border-gray-200 overflow-hidden text-xs">
+                     <button onClick={() => setFirestoreEdition('standard')} className={`flex-1 py-1 ${firestoreEdition === 'standard' ? 'bg-gray-800 text-white' : 'bg-white'}`}>Standard</button>
+                     <button onClick={() => setFirestoreEdition('enterprise')} className={`flex-1 py-1 ${firestoreEdition === 'enterprise' ? 'bg-gray-800 text-white' : 'bg-white'}`}>Enterprise</button>
+                   </div>
+                   <div className="grid grid-cols-2 gap-3">
+                     <InputGroup label="Reads/Req" disabled={useGlobal} value={firestoreReadsReq} onChange={useGlobal ? () => {} : setLocalFirestoreReadsReq} step="1" />
+                     <InputGroup label="Writes/Req" disabled={useGlobal} value={firestoreWritesReq} onChange={useGlobal ? () => {} : setLocalFirestoreWritesReq} step="1" />
+                   </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Result Cards */}
+      <div className="p-4 bg-gray-50/50 space-y-3">
+        {computeProvider === 'gcp' ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-3 bg-white flex justify-between items-center border-b border-gray-100">
+               <div>
+                 <p className="text-xs font-bold text-gray-900">Google Cloud Run</p>
+                 <p className="text-[10px] text-gray-500">Monthly Compute Cost</p>
+               </div>
+               <p className="text-lg font-bold text-gray-900">{formatterUSD(total_gcp_compute_cost)}</p>
+            </div>
+            <div className="p-3 space-y-1 text-xs">
+               <div className="flex justify-between"><span className="text-gray-500">Processing:</span><span className="font-semibold">{formatterUSD(cr_req_cost + cr_vcpu_cost + cr_mem_cost + cr_idle_cost)}</span></div>
+               <div className="flex justify-between"><span className="text-gray-500">Networking:</span><span className="font-semibold">{formatterUSD(cr_egress_cost)}</span></div>
             </div>
           </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+             <div className="p-3 bg-white flex justify-between items-center border-b border-gray-100">
+                <div>
+                  <p className="text-xs font-bold text-gray-900">AWS ECS Fargate</p>
+                  <p className="text-[10px] text-gray-500">Monthly Compute Cost</p>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{formatterUSD(total_aws_compute_cost)}</p>
+             </div>
+             <div className="p-3 space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-gray-500">Processing:</span><span className="font-semibold">{formatterUSD(awsComputeCost)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Networking:</span><span className="font-semibold">{formatterUSD(awsEgressCost + awsVpcCost)}</span></div>
+             </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+           <div className="p-3 bg-white flex justify-between items-center border-b border-gray-100">
+              <div>
+                <p className="text-xs font-bold text-gray-900">Firestore <span className="text-[10px] bg-gray-100 text-gray-600 px-1 py-0.5 rounded ml-1">{firestoreEdition}</span></p>
+                <p className="text-[10px] text-gray-500">Monthly DB Cost</p>
+              </div>
+              <p className="text-lg font-bold text-gray-900">{formatterUSD(total_firestore_cost_usd)}</p>
+           </div>
+           <div className="p-3 space-y-1 text-xs">
+              <div className="flex justify-between"><span className="text-gray-500">Reads:</span><span className="font-semibold">{formatterUSD(fs_reads_cost)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Writes:</span><span className="font-semibold">{formatterUSD(fs_writes_cost)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Storage:</span><span className="font-semibold">{formatterUSD(fs_storage_cost)}</span></div>
+           </div>
         </div>
 
-        <div className="lg:col-span-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {computeProvider === 'gcp' ? (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-blue-50/50 to-white">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center">
-                      <Cloud className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <h2 className="text-lg font-semibold text-gray-900">Google Cloud Run</h2>
-                  </div>
-                  <p className="text-sm text-gray-500 font-medium">Monthly Compute Cost</p>
-                  <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_gcp_compute_cost)}</p>
-                </div>
-                <div className="p-6 flex-1 bg-gray-50/50">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">HTTP Requests</span><span className="font-medium">{formatterUSD(cr_req_cost)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">vCPU Time</span><span className="font-medium">{formatterUSD(cr_vcpu_cost)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Memory Time</span><span className="font-medium">{formatterUSD(cr_mem_cost)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Networking (Egress)</span><span className="font-medium">{formatterUSD(cr_egress_cost)}</span></div>
-                    {cr_idle_cost > 0 && (
-                      <div className="flex justify-between text-yellow-700 bg-yellow-100/50 -mx-2 px-2 py-1 rounded">
-                        <span>Idle Penalty</span><span className="font-medium">{formatterUSD(cr_idle_cost)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col relative border-amber-200">
-                <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-amber-50/80 to-white">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded bg-amber-100 flex items-center justify-center">
-                      <Cloud className="w-4 h-4 text-amber-600" />
-                    </div>
-                    <h2 className="text-lg font-semibold text-gray-900">AWS ECS Fargate</h2>
-                  </div>
-                  <p className="text-sm text-gray-500 font-medium">Monthly Compute Cost</p>
-                  <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_aws_compute_cost)}</p>
-                </div>
-                <div className="p-6 flex-1 bg-gray-50/50">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">Baseline Provisioned</span><span className="font-medium">{formatterUSD(awsBaselineCost)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Active Extra Load Computes</span><span className="font-medium">{formatterUSD(awsPeakCost)}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Networking (Egress)</span><span className="font-medium">{formatterUSD(awsEgressCost)}</span></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-orange-50/50 to-white">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded bg-orange-100 flex items-center justify-center">
-                    <Database className="w-4 h-4 text-orange-600" />
-                  </div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Firestore 
-                    <span className="text-xs font-medium bg-white border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full ml-2 capitalize shadow-sm">{firestoreEdition}</span>
-                  </h2>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Monthly DB Cost</p>
-                <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_firestore_cost_usd)}</p>
-              </div>
-              <div className="p-6 flex-1 bg-gray-50/50">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Reads ({formatNum(total_reads)})</span><span className="font-medium">{formatterUSD(fs_reads_cost)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Writes ({formatNum(total_writes)})</span><span className="font-medium">{formatterUSD(fs_writes_cost)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Storage ({total_storage_gib.toFixed(2)} GiB)</span><span className="font-medium">{formatterUSD(fs_storage_cost)}</span></div>
-                </div>
-              </div>
-            </div>
+        <div className="bg-gray-900 rounded-xl overflow-hidden p-4 flex items-center justify-between shadow-md relative">
+          <div className="relative z-10">
+            <h3 className="text-gray-400 font-medium text-xs mb-1">Total Estimated Infra Bill</h3>
+            <div className="text-2xl font-bold text-white tracking-tight">{formatterUSD(total_backend_cost_usd)} <span className="text-gray-500 text-sm font-medium">/mo</span></div>
           </div>
-
-          <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden p-6 flex items-center justify-between gap-6 relative">
-            <div className="relative z-10">
-              <h3 className="text-gray-400 font-medium text-lg mb-1">Total Estimated Infra Bill</h3>
-              <div className="text-4xl font-bold text-white tracking-tight">{formatterUSD(total_backend_cost_usd)} <span className="text-gray-500 text-lg font-medium">/ mo</span></div>
-            </div>
-            <div className="w-14 h-14 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center relative z-10 shadow-lg">
-              <Zap className="w-7 h-7 text-yellow-400" />
-            </div>
+          <div className="w-10 h-10 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center relative z-10">
+            <Zap className="w-5 h-5 text-indigo-400" />
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }

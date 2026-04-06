@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calculator, Globe, Info } from 'lucide-react';
+import { Calculator } from 'lucide-react';
 import GlobalDashboard from './components/GlobalDashboard';
 import PaymentCalculator from './components/PaymentCalculator';
 import CloudCalculator from './components/CloudCalculator';
@@ -15,60 +15,58 @@ export default function App() {
   const formatterUSD = (amount: number) => formatUSDBase(amount, displayCurrency, usdToNgnRate);
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-gray-900 font-sans selection:bg-gray-200 pb-16">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[#F8F9FB] text-gray-900 font-sans selection:bg-gray-200 pb-16">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm/50">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center shadow-sm">
               <Calculator className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-semibold tracking-tight hidden sm:block">Levytate</span>
+            <span className="text-xl font-bold tracking-tight hidden sm:block">Levytate</span>
           </div>
           
-          <div className="flex items-center space-x-4 ml-auto">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-gray-400" />
-              <div className="flex bg-gray-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setDisplayCurrency('NGN')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  NGN
-                </button>
-                <button 
-                  onClick={() => setDisplayCurrency('USD')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  USD
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center space-x-4">
+             {/* Small inline Input for Exchange Rate implicitly handled */}
+             <div className="flex items-center gap-2 mr-2">
+                <span className="text-xs text-gray-500 font-medium">USD to NGN:</span>
+                <input 
+                  type="number" 
+                  value={usdToNgnRate || ''} 
+                  onChange={(e) => setUsdToNgnRate(parseFloat(e.target.value) || 0)}
+                  className="w-16 px-1.5 py-0.5 text-right font-medium text-xs text-gray-900 border border-gray-200 rounded focus:border-gray-900 focus:outline-none hide-arrows transition-colors"
+                />
+             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 space-y-12">
-        <GlobalDashboard />
-        
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4 max-w-sm">
-           <InputGroup label="Exchange Rate (USD to NGN)" value={usdToNgnRate} onChange={setUsdToNgnRate} prefix="₦" step="10" />
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          
+          <GlobalDashboard>
+            <div className="flex bg-gray-100/80 p-0.5 rounded-lg border border-gray-200 shadow-sm">
+              <button 
+                onClick={() => setDisplayCurrency('NGN')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                NGN
+              </button>
+              <button 
+                onClick={() => setDisplayCurrency('USD')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                USD
+              </button>
+            </div>
+          </GlobalDashboard>
+
+          <PaymentCalculator formatterNGN={formatterNGN} />
+          
+          <CloudCalculator formatterUSD={formatterUSD} />
+
+          <WhatsAppCalculator formatterUSD={formatterUSD} />
+
         </div>
-
-        <PaymentCalculator 
-            formatterNGN={formatterNGN} 
-        />
-        
-        <div className="h-px bg-gray-200" />
-
-        <CloudCalculator 
-            formatterUSD={formatterUSD} 
-        />
-
-        <div className="h-px bg-gray-200" />
-
-        <WhatsAppCalculator 
-            formatterUSD={formatterUSD} 
-        />
       </main>
     </div>
   );
