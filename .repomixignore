@@ -1,0 +1,27 @@
+# Ignore everything
+/*
+
+# Allow essential source code and configurations
+!/src/
+!/package.json
+!/index.html
+!/metadata.json
+!/vite.config.ts
+!/tsconfig.json
+!/.repomixignore
+
+# Keep .env.example (but ignore actual .env files)
+!/.env.example
+
+# Files inside src/ that should still be ignored (if any, like large assets)
+# (Add if needed)
+
+# Standard ignores (backstage, mostly redundant now but good practice)
+/node_modules/
+/.git/
+/dist/
+/build/
+/.DS_Store
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
