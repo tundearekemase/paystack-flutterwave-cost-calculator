@@ -1,29 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  Calculator, 
-  MapPin,
-  Info, 
-  CreditCard, 
-  Wallet, 
-  Receipt, 
-  Server, 
-  Cloud, 
-  MessageCircle, 
-  Globe, 
-  AlertCircle, 
-  CheckSquare, 
-  Square,
-  TrendingUp,
-  BarChart3,
-  Store,
-  DollarSign,
-  Smartphone,
-  Settings2
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Calculator, Info, Settings2, CreditCard, Wallet, Receipt, Server, Database, Cloud, Activity, Globe, Zap, AlertCircle, CheckSquare, Square, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// --- Formatters ---
-const formatCurrency = (val: number, currency: 'NGN' | 'USD') => {
+const buildFormat = (val: number, currency: 'NGN' | 'USD') => {
   return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'en-NG', {
     style: 'currency',
     currency: currency,
@@ -32,33 +11,65 @@ const formatCurrency = (val: number, currency: 'NGN' | 'USD') => {
   }).format(val);
 };
 
-const formatNum = (num: number) => new Intl.NumberFormat('en-US').format(num);
-
-// --- Constants ---
-const GCP = {
-  FREE_REQS: 2000000,
-  PRICE_PER_M_REQS: 0.40,
-  FREE_VCPU_SEC: 180000,
-  PRICE_VCPU_SEC: 0.000024,
-  FREE_MEM_SEC: 360000,
-  PRICE_MEM_SEC: 0.0000025,
+const formatNGNBase = (ngnAmount: number, currency: 'NGN' | 'USD', rate: number) => {
+  const val = currency === 'USD' ? ngnAmount / rate : ngnAmount;
+  return buildFormat(val, currency);
 };
 
+const formatUSDBase = (usdAmount: number, currency: 'NGN' | 'USD', rate: number) => {
+  const val = currency === 'NGN' ? usdAmount * rate : usdAmount;
+  return buildFormat(val, currency);
+};
+
+const formatNum = (num: number) => {
+  return new Intl.NumberFormat('en-US').format(num);
+};
+
+// GCP Constants
+const GCP = {
+  CR_FREE_REQS: 2000000,
+  CR_PRICE_PER_M_REQS: 0.40,
+  CR_FREE_VCPU_SEC: 180000,
+  CR_PRICE_VCPU_SEC: 0.000024,
+  CR_FREE_MEM_SEC: 360000,
+  CR_PRICE_MEM_SEC: 0.0000025,
+  FREE_EGRESS_GIB: 1,
+  PRICE_EGRESS_GIB: 0.12,
+  CR_IDLE_PRICE_VCPU_SEC: 0.0000025,
+  CR_IDLE_PRICE_MEM_SEC: 0.0000025
+};
+
+// AWS Constants
+const AWS = {
+  VCPU_RATE: 0.064,
+  MEM_RATE: 0.007,
+  EGRESS_FREE_GB: 100,
+  EGRESS_RATE: 0.09,
+  NAT_GATEWAY_FLAT: 32.40,
+  NAT_GATEWAY_DATA: 0.045,
+  APP_RUNNER_DEPLOY_TOTAL: 2.00, // $1 flat + $1 avg build mins
+  CLOUDWATCH_RATE: 0.50,
+};
+
+// Firestore Constants
 const FS = {
-  FREE_READS_MO: 1500000, // 50k daily
-  FREE_WRITES_MO: 600000,  // 20k daily
   PRICE_PER_100K_READS: 0.03,
   PRICE_PER_100K_WRITES: 0.09,
+  PRICE_STORAGE_GIB: 0.15,
+  ENT_PRICE_READS_MILLION: 0.05,
+  ENT_PRICE_WRITES_MILLION: 0.26,
+  ENT_PRICE_STORAGE_GIB: 0.15,
 };
 
-// WhatsApp 2026 Native Rates (Nigeria/Africa Proxy via USD)
-// Service & Utility (in 24h) are FREE. Marketing/Utility (outside) are charged.
-const WA_RATES = {
-  marketing: 0.0510,
-  utility: 0.0069
+// WhatsApp Constants
+const WA_RATES: Record<string, { name: string, marketing: number, utility: number }> = {
+  'NGA': { name: 'Nigeria', marketing: 0.0510, utility: 0.0250 },
+  'GHA': { name: 'Ghana', marketing: 0.0460, utility: 0.0230 },
+  'SEN': { name: 'Senegal', marketing: 0.0550, utility: 0.0280 },
+  'CIV': { name: 'Ivory Coast', marketing: 0.0530, utility: 0.0270 },
+  'OWA': { name: 'Other W.A.', marketing: 0.0550, utility: 0.0280 },
 };
 
-// --- Checkbox Component ---
 function Checkbox({ label, checked, onChange, tooltip }: { label: string, checked: boolean, onChange: (val: boolean) => void, tooltip?: string }) {
   return (
     <div className="flex flex-col mb-1 mt-1">
@@ -74,7 +85,1093 @@ function Checkbox({ label, checked, onChange, tooltip }: { label: string, checke
   );
 }
 
-// --- Input Component ---
+export default function App() {
+  const [displayCurrency, setDisplayCurrency] = useState<'NGN' | 'USD'>('NGN');
+  const [feeBearer, setFeeBearer] = useState<'merchant' | 'customer'>('merchant');
+  
+  // Section UI Toggles
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCloudAdvanced, setShowCloudAdvanced] = useState(false);
+  
+  // Architecture Toggles
+  const [gatewayProvider, setGatewayProvider] = useState<'paystack' | 'flutterwave'>('paystack');
+  const [computeProvider, setComputeProvider] = useState<'gcp' | 'aws'>('gcp');
+  const [firestoreEdition, setFirestoreEdition] = useState<'standard' | 'enterprise'>('standard');
+  const [awsRequireVpcNat, setAwsRequireVpcNat] = useState(false);
+  const [awsAutomatedDeployments, setAwsAutomatedDeployments] = useState(false);
+  const [waTargetCountry, setWaTargetCountry] = useState('NGA');
+
+  const [inputs, setInputs] = useState({
+    // Economy
+    usdToNgnRate: 1500,
+
+    // FinTech Inputs
+    price: 10000,
+    users: 1000,
+    txnsPerWeek: 3,
+    weeksPerMonth: 4.33,
+    paystackPercentage: 1.5,
+    paystackCap: 2000,
+    paystackFlatThreshold: 2500,
+    paystackFlatAmount: 100,
+    flutterwavePercentage: 2.0,
+    flutterwaveCap: 2000,
+    
+    // Shared Cloud Infrastructure Inputs
+    requestsPerUserMonth: 100,
+    backendRequestTimeMs: 300,
+    backendEgressKb: 10,
+    
+    // GCP Cloud Run specific
+    cloudRunVcpu: 1,
+    cloudRunMemGib: 0.5,
+    cloudRunConcurrency: 80,
+    minInstances: 0,
+
+    // AWS App Runner specific
+    awsAppRunnerVcpu: 1,
+    awsAppRunnerMemGb: 2,
+    awsAppRunnerConcurrencyLimit: 100,
+    awsAppRunnerMinInstances: 1,
+    peakTrafficPercentage: 80,
+    peakHoursPerDay: 4,
+    awsCloudWatchLogsGb: 10,
+    
+    // Firestore specific
+    firestoreReadsReq: 3,
+    firestoreWritesReq: 1,
+    firestoreStorageMb: 1,
+    
+    // WhatsApp specific
+    waUserRequests: 5,
+    waMarketingMsgs: 2,
+    waUtilityMsgs: 10,
+    waUtilityInsideWindowPercent: 80,
+    
+    firestoreStandardFreeReadsMo: 1500000,
+    firestoreStandardFreeWritesMo: 600000,
+    firestoreStandardFreeStorageGib: 1,
+
+    firestoreEnterpriseFreeReadsMillion: 0,
+    firestoreEnterpriseFreeWritesMillion: 0,
+    firestoreEnterpriseFreeStorageGib: 0,
+  });
+
+  const updateInput = (key: keyof typeof inputs, value: number) => {
+    setInputs(prev => ({ ...prev, [key]: value || 0 }));
+  };
+
+  // --- FINTECH CALCULATIONS ---
+  const totalMonthlyTxns = inputs.users * inputs.txnsPerWeek * inputs.weeksPerMonth;
+
+  // Paystack
+  const paystackDecimalRate = inputs.paystackPercentage / 100;
+  const paystackFlatFee = inputs.price >= inputs.paystackFlatThreshold ? inputs.paystackFlatAmount : 0;
+
+  let paystackProcessingFee: number;
+  let paystackChargeAmount: number;
+  let paystackFeeAdded: number;
+
+  if (feeBearer === 'merchant') {
+    const calculatedFee = inputs.price * paystackDecimalRate + paystackFlatFee;
+    paystackProcessingFee = Math.min(calculatedFee, inputs.paystackCap);
+    paystackChargeAmount = inputs.price;
+    paystackFeeAdded = 0;
+  } else {
+    const uncappedCharge = (inputs.price + paystackFlatFee) / (1 - paystackDecimalRate);
+    const uncappedFee = uncappedCharge - inputs.price;
+    if (uncappedFee > inputs.paystackCap) {
+      paystackProcessingFee = inputs.paystackCap;
+      paystackChargeAmount = inputs.price + inputs.paystackCap;
+    } else {
+      paystackProcessingFee = Math.round(uncappedFee * 100) / 100;
+      paystackChargeAmount = Math.round(uncappedCharge * 100) / 100;
+    }
+    paystackFeeAdded = paystackChargeAmount - inputs.price;
+  }
+  const paystackTotalPerTxn = paystackProcessingFee;
+  const paystackMonthlyCost = paystackTotalPerTxn * totalMonthlyTxns;
+
+  // Flutterwave
+  const flutterwaveDecimalRate = inputs.flutterwavePercentage / 100;
+
+  let flutterwaveProcessingFee: number;
+  let flutterwaveChargeAmount: number;
+  let flutterwaveFeeAdded: number;
+
+  if (feeBearer === 'merchant') {
+    const calculatedFee = inputs.price * flutterwaveDecimalRate;
+    flutterwaveProcessingFee = Math.min(calculatedFee, inputs.flutterwaveCap);
+    flutterwaveChargeAmount = inputs.price;
+    flutterwaveFeeAdded = 0;
+  } else {
+    const uncappedCharge = inputs.price / (1 - flutterwaveDecimalRate);
+    const uncappedFee = uncappedCharge - inputs.price;
+
+    if (uncappedFee > inputs.flutterwaveCap) {
+      flutterwaveProcessingFee = inputs.flutterwaveCap;
+      flutterwaveChargeAmount = inputs.price + inputs.flutterwaveCap;
+    } else {
+      flutterwaveProcessingFee = Math.round(uncappedFee * 100) / 100;
+      flutterwaveChargeAmount = Math.round(uncappedCharge * 100) / 100;
+    }
+    flutterwaveFeeAdded = flutterwaveChargeAmount - inputs.price;
+  }
+  const flutterwaveTotalPerTxn = flutterwaveProcessingFee;
+  const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
+
+  // --- SHARED BACKEND TRAFFIC CALCULATIONS ---
+  const totalMonthlyUsers = inputs.users;
+  const totalMonthlyBackendReqs = totalMonthlyUsers * inputs.requestsPerUserMonth;
+  const t_sec = inputs.backendRequestTimeMs / 1000;
+  const total_egress_gib = (totalMonthlyBackendReqs * inputs.backendEgressKb) / (1024 * 1024);
+
+  // --- GCP CLOUD RUN CALCULATIONS ---
+  const cr_billable_reqs = Math.max(0, totalMonthlyBackendReqs - GCP.CR_FREE_REQS);
+  const cr_req_cost = (cr_billable_reqs / 1000000) * GCP.CR_PRICE_PER_M_REQS;
+
+  const cr_total_compute_sec = (totalMonthlyBackendReqs * t_sec) / (inputs.cloudRunConcurrency || 1);
+
+  const cr_billable_vcpu_sec = Math.max(0, (cr_total_compute_sec * inputs.cloudRunVcpu) - GCP.CR_FREE_VCPU_SEC);
+  const cr_vcpu_cost = cr_billable_vcpu_sec * GCP.CR_PRICE_VCPU_SEC;
+
+  const cr_billable_mem_sec = Math.max(0, (cr_total_compute_sec * inputs.cloudRunMemGib) - GCP.CR_FREE_MEM_SEC);
+  const cr_mem_cost = cr_billable_mem_sec * GCP.CR_PRICE_MEM_SEC;
+
+  const cr_billable_egress = Math.max(0, total_egress_gib - GCP.FREE_EGRESS_GIB);
+  const cr_egress_cost = cr_billable_egress * GCP.PRICE_EGRESS_GIB;
+
+  const SECONDS_PER_MONTH = 2592000;
+  const cr_idle_vcpu_cost = inputs.minInstances * inputs.cloudRunVcpu * SECONDS_PER_MONTH * GCP.CR_IDLE_PRICE_VCPU_SEC;
+  const cr_idle_mem_cost = inputs.minInstances * inputs.cloudRunMemGib * SECONDS_PER_MONTH * GCP.CR_IDLE_PRICE_MEM_SEC;
+  const cr_idle_cost = cr_idle_vcpu_cost + cr_idle_mem_cost;
+
+  const total_gcp_compute_cost = cr_req_cost + cr_vcpu_cost + cr_mem_cost + cr_egress_cost + cr_idle_cost;
+
+  // --- AWS APP RUNNER CALCULATIONS ---
+  const activeInstanceRate = (inputs.awsAppRunnerVcpu * AWS.VCPU_RATE) + (inputs.awsAppRunnerMemGb * AWS.MEM_RATE);
+  const provisionedInstanceRate = inputs.awsAppRunnerMemGb * AWS.MEM_RATE;
+
+  const safePeakTrafficRatio = Math.min(100, Math.max(0, inputs.peakTrafficPercentage)) / 100;
+  const safePeakHours = Math.min(24, Math.max(0, inputs.peakHoursPerDay));
+  
+  const peakHoursPerMonth = safePeakHours * 30;
+  const offPeakHoursPerMonth = (24 - safePeakHours) * 30;
+
+  let peakRps = 0;
+  let offPeakRps = 0;
+  
+  if (peakHoursPerMonth > 0) {
+    peakRps = (totalMonthlyBackendReqs * safePeakTrafficRatio) / (peakHoursPerMonth * 3600);
+  }
+  if (offPeakHoursPerMonth > 0) {
+    offPeakRps = (totalMonthlyBackendReqs * (1 - safePeakTrafficRatio)) / (offPeakHoursPerMonth * 3600);
+  }
+
+  const peakConcurrency = peakRps * t_sec;
+  const offPeakConcurrency = offPeakRps * t_sec;
+
+  const peakInstancesNeeded = Math.max(inputs.awsAppRunnerMinInstances, Math.ceil(peakConcurrency / inputs.awsAppRunnerConcurrencyLimit));
+  const offPeakInstancesNeeded = Math.max(inputs.awsAppRunnerMinInstances, Math.ceil(offPeakConcurrency / inputs.awsAppRunnerConcurrencyLimit));
+
+  // Baseline 24/7 idle memory
+  const awsBaselineCost = inputs.awsAppRunnerMinInstances * 720 * provisionedInstanceRate;
+
+  // Active compute cost minus the provisioned memory we already paid for
+  const awsPeakCost = Math.max(0, (peakInstancesNeeded * peakHoursPerMonth * activeInstanceRate) - (inputs.awsAppRunnerMinInstances * peakHoursPerMonth * provisionedInstanceRate));
+  const awsOffPeakCost = Math.max(0, (offPeakInstancesNeeded * offPeakHoursPerMonth * activeInstanceRate) - (inputs.awsAppRunnerMinInstances * offPeakHoursPerMonth * provisionedInstanceRate));
+
+  const awsComputeCost = awsBaselineCost + awsPeakCost + awsOffPeakCost;
+
+  // AWS Hidden Costs
+  const awsBillableEgress = Math.max(0, total_egress_gib - AWS.EGRESS_FREE_GB);
+  const awsEgressCost = awsBillableEgress * AWS.EGRESS_RATE;
+  
+  const awsVpcCost = awsRequireVpcNat ? (AWS.NAT_GATEWAY_FLAT + (total_egress_gib * AWS.NAT_GATEWAY_DATA)) : 0;
+  const awsDeployCost = awsAutomatedDeployments ? AWS.APP_RUNNER_DEPLOY_TOTAL : 0;
+  const awsLoggingCost = inputs.awsCloudWatchLogsGb * AWS.CLOUDWATCH_RATE;
+
+  const total_aws_compute_cost = awsComputeCost + awsEgressCost + awsVpcCost + awsDeployCost + awsLoggingCost;
+
+  // Set the unified variable mapping for the global total
+  const compute_subtotal_usd = computeProvider === 'gcp' ? total_gcp_compute_cost : total_aws_compute_cost;
+
+  // --- FIRESTORE CALCULATIONS ---
+  const total_reads = totalMonthlyBackendReqs * inputs.firestoreReadsReq;
+  const total_writes = totalMonthlyBackendReqs * inputs.firestoreWritesReq;
+  const total_storage_gib = (totalMonthlyUsers * inputs.firestoreStorageMb) / 1024;
+
+  let fs_reads_cost = 0;
+  let fs_writes_cost = 0;
+  let fs_storage_cost = 0;
+
+  if (firestoreEdition === 'standard') {
+    const fs_billable_reads = Math.max(0, total_reads - inputs.firestoreStandardFreeReadsMo);
+    fs_reads_cost = (fs_billable_reads / 100000) * FS.PRICE_PER_100K_READS;
+
+    const fs_billable_writes = Math.max(0, total_writes - inputs.firestoreStandardFreeWritesMo);
+    fs_writes_cost = (fs_billable_writes / 100000) * FS.PRICE_PER_100K_WRITES;
+
+    const fs_billable_storage = Math.max(0, total_storage_gib - inputs.firestoreStandardFreeStorageGib);
+    fs_storage_cost = fs_billable_storage * FS.PRICE_STORAGE_GIB;
+  } else {
+    const total_read_millions = total_reads / 1000000;
+    const fs_billable_reads_mil = Math.max(0, total_read_millions - inputs.firestoreEnterpriseFreeReadsMillion);
+    fs_reads_cost = fs_billable_reads_mil * FS.ENT_PRICE_READS_MILLION;
+
+    const total_write_millions = total_writes / 1000000;
+    const fs_billable_writes_mil = Math.max(0, total_write_millions - inputs.firestoreEnterpriseFreeWritesMillion);
+    fs_writes_cost = fs_billable_writes_mil * FS.ENT_PRICE_WRITES_MILLION;
+
+    const fs_billable_storage = Math.max(0, total_storage_gib - inputs.firestoreEnterpriseFreeStorageGib);
+    fs_storage_cost = fs_billable_storage * FS.ENT_PRICE_STORAGE_GIB;
+  }
+
+  const total_firestore_cost_usd = fs_reads_cost + fs_writes_cost + fs_storage_cost;
+  const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
+
+  // --- WHATSAPP CLOUD API CALCULATIONS ---
+  const currentWaRate = WA_RATES[waTargetCountry];
+  
+  // Marketing
+  const totalMarketingMessages = inputs.users * inputs.waMarketingMsgs;
+  const waMarketingCostUsd = totalMarketingMessages * currentWaRate.marketing;
+
+  // Service
+  const totalServiceRequests = inputs.users * inputs.waUserRequests;
+  const waServiceCostUsd = 0; // User-initiated replies within 24h are free
+
+  // Utility
+  const totalUtilityMessages = inputs.users * inputs.waUtilityMsgs;
+  const freeUtilityMessages = totalUtilityMessages * (inputs.waUtilityInsideWindowPercent / 100);
+  const chargeableUtilityMessages = Math.max(0, totalUtilityMessages - freeUtilityMessages);
+
+  let waUtilityCostUsd = 0;
+  let remainingChargeable = chargeableUtilityMessages;
+  
+  if (remainingChargeable > 0) {
+    const tier1 = Math.min(100000, remainingChargeable);
+    waUtilityCostUsd += tier1 * currentWaRate.utility;
+    remainingChargeable -= tier1;
+  }
+  if (remainingChargeable > 0) {
+    const tier2 = Math.min(400000, remainingChargeable);
+    waUtilityCostUsd += tier2 * (currentWaRate.utility * 0.95);
+    remainingChargeable -= tier2;
+  }
+  if (remainingChargeable > 0) {
+    waUtilityCostUsd += remainingChargeable * (currentWaRate.utility * 0.90);
+  }
+
+  const totalWaCostUsd = waMarketingCostUsd + waServiceCostUsd + waUtilityCostUsd;
+
+  const formatterNGN = (amount: number) => formatNGNBase(amount, displayCurrency, inputs.usdToNgnRate);
+  const formatterUSD = (amount: number) => formatUSDBase(amount, displayCurrency, inputs.usdToNgnRate);
+
+  return (
+    <div className="min-h-screen bg-[#FAFAFA] text-gray-900 font-sans selection:bg-gray-200 pb-16">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
+              <Calculator className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-xl font-semibold tracking-tight hidden sm:block">Levytate</span>
+          </div>
+          
+          <div className="flex items-center space-x-4 ml-auto">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-gray-400" />
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => setDisplayCurrency('NGN')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  NGN
+                </button>
+                <button 
+                  onClick={() => setDisplayCurrency('USD')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  USD
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 space-y-16">
+        
+        {/* --- PART 1: FINTECH --- */}
+        <section>
+          <div className="mb-8 max-w-2xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">
+              Payment Gateway Cost
+            </h1>
+            <p className="text-gray-500 text-lg">
+              Calculate your monthly gateway fees based on sales volume.
+            </p>
+          </div>
+
+          {/* Gateway Toggle */}
+          <div className="flex flex-col space-y-3 max-w-sm mb-6">
+            <label className="text-sm font-semibold text-gray-900">Payment Gateway</label>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm p-1 bg-gray-100 gap-1 w-fit">
+              <button
+                onClick={() => setGatewayProvider('paystack')}
+                className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${gatewayProvider === 'paystack' ? 'bg-white text-sky-700 shadow-sm font-bold border border-sky-100' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                Paystack
+              </button>
+              <button
+                onClick={() => setGatewayProvider('flutterwave')}
+                className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${gatewayProvider === 'flutterwave' ? 'bg-white text-orange-600 shadow-sm font-bold border border-orange-100' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                Flutterwave
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-6 space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Receipt className="w-5 h-5 text-gray-400" />
+                      Sales & Economics
+                    </h2>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <InputGroup label="Exchange Rate (USD to NGN)" value={inputs.usdToNgnRate} onChange={(v) => updateInput('usdToNgnRate', v)} prefix="₦" step="10" />
+                    <div className="pt-2 border-t border-gray-100">
+                      <InputGroup label="Amount per Sale" value={inputs.price} onChange={(v) => updateInput('price', v)} prefix="₦" />
+                    </div>
+                    <InputGroup label="Number of Customers" value={inputs.users} onChange={(v) => updateInput('users', v)} />
+                    <InputGroup label="Sales per customer each week" value={inputs.txnsPerWeek} onChange={(v) => updateInput('txnsPerWeek', v)} />
+
+                    <div className="flex flex-col space-y-2 pt-2">
+                      <label className="text-sm font-medium text-gray-700">Who pays the fees?</label>
+                      <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm">
+                        <button onClick={() => setFeeBearer('merchant')} className={`flex-1 px-3 py-2.5 text-sm font-medium transition-all duration-200 ${feeBearer === 'merchant' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Merchant</button>
+                        <button onClick={() => setFeeBearer('customer')} className={`flex-1 px-3 py-2.5 text-sm font-medium transition-all duration-200 border-l border-gray-300 ${feeBearer === 'customer' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Customer</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 bg-gray-50">
+                  <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full px-6 py-4 flex items-center justify-between text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">
+                    <span className="flex items-center gap-2"><Settings2 className="w-4 h-4" /> Gateway Advanced Settings</span>
+                    {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  <AnimatePresence>
+                    {showAdvanced && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="px-6 pb-6 space-y-6 pt-2">
+                          <InputGroup label="Weeks in a month" value={inputs.weeksPerMonth} onChange={(v) => updateInput('weeksPerMonth', v)} step="0.01" />
+                          {gatewayProvider === 'paystack' ? (
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Paystack Fees</h3>
+                              <div className="grid grid-cols-2 gap-4">
+                                <InputGroup label="Percentage" value={inputs.paystackPercentage} onChange={(v) => updateInput('paystackPercentage', v)} suffix="%" step="0.1" />
+                                <InputGroup label="Max Cap" value={inputs.paystackCap} onChange={(v) => updateInput('paystackCap', v)} prefix="₦" />
+                                <InputGroup label="Flat Threshold" value={inputs.paystackFlatThreshold} onChange={(v) => updateInput('paystackFlatThreshold', v)} prefix="₦" />
+                                <InputGroup label="Flat Fee" value={inputs.paystackFlatAmount} onChange={(v) => updateInput('paystackFlatAmount', v)} prefix="₦" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">Flutterwave Fees</h3>
+                              <div className="grid grid-cols-2 gap-4">
+                                <InputGroup label="Percentage" value={inputs.flutterwavePercentage} onChange={(v) => updateInput('flutterwavePercentage', v)} suffix="%" step="0.1" />
+                                <InputGroup label="Max Cap" value={inputs.flutterwaveCap} onChange={(v) => updateInput('flutterwaveCap', v)} prefix="₦" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-8 flex justify-center lg:justify-start">
+              <div className="w-full max-w-sm">
+                {gatewayProvider === 'paystack' ? (
+                  /* Paystack Card */
+                  <div className="bg-white rounded-2xl border border-sky-200 shadow-sm overflow-hidden flex flex-col relative">
+                    <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-sky-50/80 to-white">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded bg-sky-100 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4 text-sky-600" />
+                        </div>
+                        <h2 className="text-lg font-semibold text-gray-900">Paystack</h2>
+                      </div>
+                      <p className="text-sm text-gray-500 font-medium">Cost per month</p>
+                      <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterNGN(paystackMonthlyCost)}</p>
+                    </div>
+                    <div className="p-6 flex-1 bg-gray-50/50">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost per sale breakdown</h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Processing ({inputs.paystackPercentage}% + flat)</span>
+                          <span className="font-medium">{formatterNGN(paystackProcessingFee)}</span>
+                        </div>
+                        <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between font-semibold text-gray-900">
+                          <span>Fee per sale</span>
+                          <span>{formatterNGN(paystackTotalPerTxn)}</span>
+                        </div>
+                        {feeBearer === 'merchant' && (
+                          <div className="pt-2">
+                            <div className="flex justify-between text-green-700 text-xs">
+                              <span>You receive per sale</span>
+                              <span className="font-medium">{formatterNGN(inputs.price - paystackTotalPerTxn)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Flutterwave Card */
+                  <div className="bg-white rounded-2xl border border-orange-200 shadow-sm overflow-hidden flex flex-col relative">
+                    <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-orange-50/80 to-white">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded bg-orange-100 flex items-center justify-center">
+                          <Wallet className="w-4 h-4 text-orange-600" />
+                        </div>
+                        <h2 className="text-lg font-semibold text-gray-900">Flutterwave</h2>
+                      </div>
+                      <p className="text-sm text-gray-500 font-medium">Cost per month</p>
+                      <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterNGN(flutterwaveMonthlyCost)}</p>
+                    </div>
+                    <div className="p-6 flex-1 bg-gray-50/50">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost per sale breakdown</h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Processing ({inputs.flutterwavePercentage}%)</span>
+                          <span className="font-medium">{formatterNGN(flutterwaveProcessingFee)}</span>
+                        </div>
+                        <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between font-semibold text-gray-900">
+                          <span>Fee per sale</span>
+                          <span>{formatterNGN(flutterwaveTotalPerTxn)}</span>
+                        </div>
+                        {feeBearer === 'merchant' && (
+                          <div className="pt-2">
+                            <div className="flex justify-between text-green-700 text-xs">
+                              <span>You receive per sale</span>
+                              <span className="font-medium">{formatterNGN(inputs.price - flutterwaveTotalPerTxn)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="h-px bg-gray-200" />
+
+        {/* --- PART 2: BACKEND CLOUD INFRASTRUCTURE --- */}
+        <section>
+          <div className="mb-8 max-w-2xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">
+              Backend Infrastructure Cost
+            </h1>
+            <p className="text-gray-500 text-lg">
+              Estimate your monthly cloud backend billing and database operations based on your user growth.
+            </p>
+          </div>
+
+          {/* Compute Toggle */}
+          <div className="flex flex-col space-y-3 max-w-sm mb-6">
+            <label className="text-sm font-semibold text-gray-900">Compute Backend Engine</label>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm p-1 bg-gray-100 gap-1 w-fit">
+              <button
+                onClick={() => setComputeProvider('gcp')}
+                className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${computeProvider === 'gcp' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                Google Cloud Run
+              </button>
+              <button
+                onClick={() => setComputeProvider('aws')}
+                className={`px-5 py-2 text-sm font-medium rounded transition-all duration-200 ${computeProvider === 'aws' ? 'bg-white text-amber-600 shadow-sm font-bold border border-amber-100' : 'text-gray-600 hover:text-gray-800'}`}
+              >
+                AWS App Runner
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-4 space-y-6">
+              
+              {/* Traffic Base Inputs */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-6 space-y-6">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-gray-400" />
+                    Traffic & Resources
+                  </h2>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Active Customers</span>
+                      <span className="font-semibold text-gray-900">{formatNum(inputs.users)}</span>
+                    </div>
+
+                    <InputGroup label="Requests per User/Month" value={inputs.requestsPerUserMonth} onChange={(v) => updateInput('requestsPerUserMonth', v)} />
+                    
+                    <div className="pt-2 pb-2">
+                      <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                        <AlertCircle className="w-5 h-5 flex-shrink-0 text-blue-500" />
+                        <div>Total Monthly DB Requests:<br/><span className="font-semibold text-lg">{formatNum(totalMonthlyBackendReqs)}</span></div>
+                      </div>
+                    </div>
+                    
+                    <InputGroup label="Avg Request Duration" value={inputs.backendRequestTimeMs} onChange={(v) => updateInput('backendRequestTimeMs', v)} suffix="ms" />
+                    <InputGroup label="Avg Egress Payload" value={inputs.backendEgressKb} onChange={(v) => updateInput('backendEgressKb', v)} suffix="KB" />
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 bg-gray-50">
+                  <button onClick={() => setShowCloudAdvanced(!showCloudAdvanced)} className="w-full px-6 py-4 flex items-center justify-between text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">
+                    <span className="flex items-center gap-2">
+                      <Server className="w-4 h-4" /> 
+                      {computeProvider === 'gcp' ? 'GCP' : 'AWS'} Infra Settings
+                    </span>
+                    {showCloudAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  <AnimatePresence>
+                    {showCloudAdvanced && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="px-6 pb-6 space-y-6 pt-2">
+                          
+                          {/* DYNAMIC SECTION: GCP VS AWS */}
+                          {computeProvider === 'gcp' ? (
+                            <div className="space-y-4">
+                              <h3 className="text-sm font-semibold text-blue-800 border-b border-blue-100 pb-2 flex items-center gap-2"><Cloud className="w-4 h-4 text-blue-500" /> Cloud Run Instance</h3>
+                              <div className="grid grid-cols-2 gap-4">
+                                <InputGroup label="vCPU alloc." value={inputs.cloudRunVcpu} onChange={(v) => updateInput('cloudRunVcpu', v)} step="0.1" />
+                                <InputGroup label="Memory (GiB)" value={inputs.cloudRunMemGib} onChange={(v) => updateInput('cloudRunMemGib', v)} step="0.1" />
+                                <div className="col-span-2">
+                                  <InputGroup label="Avg Concurrent Requests (C_eff)" value={inputs.cloudRunConcurrency} onChange={(v) => updateInput('cloudRunConcurrency', v)} />
+                                  <p className="text-xs text-gray-500 mt-1 pb-2">Higher concurrency shares CPU time massively.</p>
+                                </div>
+                                <div className="col-span-2 border-t border-gray-100 pt-3">
+                                  <InputGroup label="Min Instances (Always On)" value={inputs.minInstances} onChange={(v) => updateInput('minInstances', v)} />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-6">
+                              <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-amber-800 border-b border-amber-100 pb-2 flex items-center gap-2"><Cloud className="w-4 h-4 text-amber-500" /> App Runner Modeling</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <InputGroup label="vCPU alloc." value={inputs.awsAppRunnerVcpu} onChange={(v) => updateInput('awsAppRunnerVcpu', v)} step="0.25" />
+                                  <InputGroup label="Memory (GB)" value={inputs.awsAppRunnerMemGb} onChange={(v) => updateInput('awsAppRunnerMemGb', v)} step="1" />
+                                  <div className="col-span-2">
+                                    <InputGroup label="Concurrency Limit (C_max)" value={inputs.awsAppRunnerConcurrencyLimit} onChange={(v) => updateInput('awsAppRunnerConcurrencyLimit', v)} />
+                                    <p className="text-xs text-gray-500 mt-1 pb-1">Triggers scaling. Little's law calculates instances needed.</p>
+                                  </div>
+                                  <div className="col-span-2 border-t border-gray-100 pt-3">
+                                    <div className="flex justify-between items-end gap-4 pb-2">
+                                      <div className="flex-1"><InputGroup label="Traffic Peak %" value={inputs.peakTrafficPercentage} onChange={(v) => updateInput('peakTrafficPercentage', v)} suffix="%" /></div>
+                                      <div className="flex-1"><InputGroup label="Peak Hrs/Day" value={inputs.peakHoursPerDay} onChange={(v) => updateInput('peakHoursPerDay', v)} /></div>
+                                    </div>
+                                    <div className="bg-gray-100 p-2 rounded text-xs text-gray-600 block mt-1">
+                                      Calculates RPS independently to reflect real concurrency surges.
+                                    </div>
+                                  </div>
+                                  <div className="col-span-2 border-t border-gray-100 pt-3">
+                                    <InputGroup label="Min Instances (Provisioned)" value={inputs.awsAppRunnerMinInstances} onChange={(v) => updateInput('awsAppRunnerMinInstances', v)} />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-amber-800 border-b border-amber-100 pb-2 flex items-center gap-2"><Settings2 className="w-4 h-4 text-amber-500" /> Missing Toggles & Hidden Costs</h3>
+                                <div>
+                                  <Checkbox label="Requires VPC Connector & NAT" checked={awsRequireVpcNat} onChange={setAwsRequireVpcNat} tooltip="Mandatory for Private RDS/DB connection while maintaining internet access. Incurs NAT hourly + processing." />
+                                  <Checkbox label="Enable Automatic Deployments" checked={awsAutomatedDeployments} onChange={setAwsAutomatedDeployments} tooltip="Source code deployments via Github add a flat $1.00 + simulated 200 build mins." />
+                                  <div className="pt-3">
+                                    <InputGroup label="CloudWatch Log Size Ingestion" value={inputs.awsCloudWatchLogsGb} onChange={(v) => updateInput('awsCloudWatchLogsGb', v)} suffix="GB" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+
+                          <div className="space-y-4 pt-4 border-t-2 border-dashed border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><Database className="w-4 h-4 text-gray-500" /> Firestore Database Tuning</h3>
+                            
+                            <div className="flex flex-col space-y-2 mb-3">
+                              <label className="text-sm text-gray-700 font-medium">Firestore Edition</label>
+                              <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm">
+                                <button onClick={() => setFirestoreEdition('standard')} className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-200 ${firestoreEdition === 'standard' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Standard</button>
+                                <button onClick={() => setFirestoreEdition('enterprise')} className={`flex-1 px-3 py-2 text-xs font-medium transition-all duration-200 border-l border-gray-300 ${firestoreEdition === 'enterprise' ? 'bg-gray-900 text-white shadow-inner' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Enterprise</button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <InputGroup label="Reads/Req" value={inputs.firestoreReadsReq} onChange={(v) => updateInput('firestoreReadsReq', v)} step="1" />
+                              <InputGroup label="Writes/Req" value={inputs.firestoreWritesReq} onChange={(v) => updateInput('firestoreWritesReq', v)} step="1" />
+                              <div className="col-span-2">
+                                <InputGroup label="Storage per User (MB)" value={inputs.firestoreStorageMb} onChange={(v) => updateInput('firestoreStorageMb', v)} step="0.1" />
+                              </div>
+                            </div>
+
+                            {firestoreEdition === 'enterprise' && (
+                              <div className="pt-2 pb-2 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
+                                <h4 className="text-xs font-medium text-indigo-800 mb-3">Enterprise Free Tiers (Millions)</h4>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <InputGroup label="Reads (mils)" value={inputs.firestoreEnterpriseFreeReadsMillion} onChange={(v) => updateInput('firestoreEnterpriseFreeReadsMillion', v)} />
+                                  <InputGroup label="Writes (mils)" value={inputs.firestoreEnterpriseFreeWritesMillion} onChange={(v) => updateInput('firestoreEnterpriseFreeWritesMillion', v)} />
+                                  <InputGroup label="Storage GiB" value={inputs.firestoreEnterpriseFreeStorageGib} onChange={(v) => updateInput('firestoreEnterpriseFreeStorageGib', v)} />
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+              
+            </div>
+
+            <div className="lg:col-span-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Compute Context Card (GCP vs AWS) */}
+                {computeProvider === 'gcp' ? (
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-blue-50/50 to-white">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center">
+                          <Cloud className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <h2 className="text-lg font-semibold text-gray-900">Google Cloud Run</h2>
+                      </div>
+                      <p className="text-sm text-gray-500 font-medium">Monthly Compute Cost</p>
+                      <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_gcp_compute_cost)}</p>
+                    </div>
+                    <div className="p-6 flex-1 bg-gray-50/50">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">HTTP Requests</span>
+                          <span className="font-medium">{formatterUSD(cr_req_cost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">vCPU Time</span>
+                          <span className="font-medium">{formatterUSD(cr_vcpu_cost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Memory Time</span>
+                          <span className="font-medium">{formatterUSD(cr_mem_cost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Networking (Egress)</span>
+                          <span className="font-medium">{formatterUSD(cr_egress_cost)}</span>
+                        </div>
+                        {cr_idle_cost > 0 && (
+                          <div className="flex justify-between text-yellow-700 bg-yellow-100/50 -mx-2 px-2 py-1 rounded">
+                            <span>Idle Penalty ({inputs.minInstances} min inst)</span>
+                            <span className="font-medium">{formatterUSD(cr_idle_cost)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col relative border-amber-200">
+                    <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-amber-50/80 to-white">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded bg-amber-100 flex items-center justify-center">
+                          <Cloud className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <h2 className="text-lg font-semibold text-gray-900">AWS App Runner</h2>
+                      </div>
+                      <p className="text-sm text-gray-500 font-medium">Monthly Compute Cost</p>
+                      <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_aws_compute_cost)}</p>
+                    </div>
+                    <div className="p-6 flex-1 bg-gray-50/50">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between text-gray-500 text-xs pb-1 mb-2 border-b border-gray-100">
+                          <span>Peak: {peakInstancesNeeded} inst | Off-Peak: {offPeakInstancesNeeded} inst</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Baseline Provisioned ({inputs.awsAppRunnerMinInstances} min)</span>
+                          <span className="font-medium">{formatterUSD(awsBaselineCost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Active Peak Hours Compute</span>
+                          <span className="font-medium">{formatterUSD(awsPeakCost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Active Off-Peak Compute</span>
+                          <span className="font-medium">{formatterUSD(awsOffPeakCost)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Networking (Egress)</span>
+                          <span className="font-medium">{formatterUSD(awsEgressCost)}</span>
+                        </div>
+                        {awsRequireVpcNat && (
+                          <div className="flex justify-between text-red-700 bg-red-100/50 -mx-2 px-2 py-1 rounded">
+                            <span>VPC + NAT Gateway</span>
+                            <span className="font-medium">{formatterUSD(awsVpcCost)}</span>
+                          </div>
+                        )}
+                        {awsAutomatedDeployments && (
+                          <div className="flex justify-between text-indigo-700 text-xs">
+                            <span>Automatic Builds ($1 + $1 mins)</span>
+                            <span className="font-medium">{formatterUSD(awsDeployCost)}</span>
+                          </div>
+                        )}
+                        {awsLoggingCost > 0 && (
+                          <div className="flex justify-between text-gray-400 text-xs">
+                            <span>CloudWatch Logs</span>
+                            <span className="font-medium">{formatterUSD(awsLoggingCost)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Firestore Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-orange-50/50 to-white">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-8 h-8 rounded bg-orange-100 flex items-center justify-center">
+                        <Database className="w-4 h-4 text-orange-600" />
+                      </div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        Firestore 
+                        <span className="text-xs font-medium bg-white border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full ml-2 capitalize shadow-sm">
+                          {firestoreEdition}
+                        </span>
+                      </h2>
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Monthly DB Cost</p>
+                    <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(total_firestore_cost_usd)}</p>
+                  </div>
+                  <div className="p-6 flex-1 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between group">
+                        <span className="text-gray-500 transition-colors">Reads ({formatNum(total_reads)})</span>
+                        <span className="font-medium">{formatterUSD(fs_reads_cost)}</span>
+                      </div>
+                      <div className="flex justify-between group">
+                        <span className="text-gray-500 transition-colors">Writes ({formatNum(total_writes)})</span>
+                        <span className="font-medium">{formatterUSD(fs_writes_cost)}</span>
+                      </div>
+                      <div className="flex justify-between group">
+                        <span className="text-gray-500 transition-colors">Storage ({total_storage_gib.toFixed(2)} GiB)</span>
+                        <span className="font-medium">{formatterUSD(fs_storage_cost)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Total Backend Bill */}
+              <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-gray-800 rounded-full blur-2xl opacity-50 pointer-events-none"></div>
+                <div className="relative z-10">
+                  <h3 className="text-gray-400 font-medium text-lg mb-1">Total Estimated Infra Bill</h3>
+                  <div className="text-4xl font-bold text-white tracking-tight">{formatterUSD(total_backend_cost_usd)} <span className="text-gray-500 text-lg font-medium">/ month</span></div>
+                </div>
+                <div className="w-14 h-14 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0 relative z-10 shadow-lg">
+                  <Zap className="w-7 h-7 text-yellow-400" />
+                </div>
+              </div>
+              
+              {computeProvider === 'aws' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 flex gap-3">
+                  <AlertCircle className="w-6 h-6 flex-shrink-0 text-yellow-600" />
+                  <div>
+                    <span className="font-semibold block mb-1">AWS Multi-Region Network Warning:</span>
+                    If App Runner and Firestore span different cloud providers (AWS to GCP), <b>ALL database traffic crosses the internet</b>. Free networking is voided and both AWS NAT outbound and GCP Egress fees apply fully. The exact payload size must be rigorously included in your Egress settings.
+                  </div>
+                </div>
+              )}
+              {computeProvider === 'gcp' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm text-emerald-800 flex gap-3">
+                  <Activity className="w-5 h-5 flex-shrink-0 text-emerald-600" />
+                  <div>
+                    <span className="font-semibold block mb-1">Synergy Network Status:</span>
+                    Collocating Google Cloud Run and Firestore (e.g. us-central1) provides zero-cost internal networking. Ensure both services share the exact same deployment region.
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </section>
+
+        <div className="h-px bg-gray-200" />
+
+        {/* --- WHATSAPP CLOUD API --- */}
+        <section>
+          <div className="mb-8 max-w-2xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">
+              WhatsApp Cloud API Cost
+            </h1>
+            <p className="text-gray-500 text-lg">
+              Estimate Meta's 2026 per-message billing rates based on your traffic routing.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-4 space-y-6">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-6 space-y-5">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5 text-emerald-500" />
+                    Messaging Volumes
+                  </h2>
+                  
+                  <div className="space-y-4">
+                    <div className="flex flex-col space-y-1.5 min-w-0">
+                      <label className="text-sm font-medium text-gray-700 truncate">Target Country</label>
+                      <select 
+                        value={waTargetCountry}
+                        onChange={(e) => setWaTargetCountry(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 transition-colors shadow-sm"
+                      >
+                        {Object.entries(WA_RATES).map(([code, data]) => (
+                          <option key={code} value={code}>{data.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <InputGroup label="User Requests (Inbound/mo)" value={inputs.waUserRequests} onChange={(v) => updateInput('waUserRequests', v)} />
+                    <InputGroup label="Marketing Msgs per User" value={inputs.waMarketingMsgs} onChange={(v) => updateInput('waMarketingMsgs', v)} />
+                    <InputGroup label="Utility Msgs per User" value={inputs.waUtilityMsgs} onChange={(v) => updateInput('waUtilityMsgs', v)} />
+                    
+                    <div className="pt-2">
+                       <InputGroup label="% Utility inside 24h Window" value={inputs.waUtilityInsideWindowPercent} onChange={(v) => updateInput('waUtilityInsideWindowPercent', v)} suffix="%" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm text-orange-800 flex gap-3">
+                <AlertCircle className="w-6 h-6 flex-shrink-0 text-orange-600" />
+                <div>
+                  <span className="font-semibold block mb-1">Auth-International Trap:</span>
+                  Sending OTP/Authentication templates from a foreign business number carries massive surcharges. Read Meta's Auth-International guidelines.
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Marketing Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-emerald-50/50 to-white">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-8 h-8 rounded bg-emerald-100 flex items-center justify-center">
+                        <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <h2 className="text-lg font-semibold text-gray-900">Marketing</h2>
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Monthly Cost</p>
+                    <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(waMarketingCostUsd)}</p>
+                  </div>
+                  <div className="p-6 flex-1 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Volume</span>
+                        <span className="font-medium">{formatNum(totalMarketingMessages)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Rate ({currentWaRate.name})</span>
+                        <span className="font-medium">${currentWaRate.marketing.toFixed(4)}/msg</span>
+                      </div>
+                      <div className="mt-3 text-xs text-gray-400 border-t border-gray-100 pt-3">
+                        Volume discounts do not apply to Marketing.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Utility Card */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-teal-50/50 to-white">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-8 h-8 rounded bg-teal-100 flex items-center justify-center">
+                        <MessageCircle className="w-4 h-4 text-teal-600" />
+                      </div>
+                      <h2 className="text-lg font-semibold text-gray-900">Utility</h2>
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Monthly Cost</p>
+                    <p className="text-3xl font-bold text-gray-900 tracking-tight">{formatterUSD(waUtilityCostUsd)}</p>
+                  </div>
+                  <div className="p-6 flex-1 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Cost breakdown</h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Chargeable Msgs</span>
+                        <span className="font-medium">{formatNum(Math.round(chargeableUtilityMessages))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Free/Windowed Msgs</span>
+                        <span className="font-medium text-emerald-600">{formatNum(Math.round(freeUtilityMessages))}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-100 pt-3 mt-3">
+                        <span className="text-gray-500">Service Replies</span>
+                        <span className="font-medium">$0.00</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden p-6 md:p-8 flex items-center justify-between gap-6">
+                <div>
+                  <h3 className="text-gray-400 font-medium text-lg mb-1">Total WhatsApp Bill</h3>
+                  <div className="text-4xl font-bold text-white tracking-tight">{formatterUSD(totalWaCostUsd)} <span className="text-gray-500 text-lg font-medium">/ month</span></div>
+                </div>
+                <div className="w-14 h-14 rounded-full bg-emerald-900/50 border border-emerald-800 flex items-center justify-center">
+                  <MessageCircle className="w-7 h-7 text-emerald-400" />
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        </section>
+
+        {/* --- PART 3: TRANSPARENCY SECTION --- */}
+        <div className="bg-[#0A0A0A] rounded-2xl shadow-xl overflow-hidden text-gray-300">
+          <div className="p-4 border-b border-gray-800 flex items-center gap-2">
+            <Info className="w-5 h-5 text-blue-400" />
+            <h3 className="font-medium text-white">Math & Mechanics</h3>
+          </div>
+          <div className="p-6 font-mono text-sm space-y-8 overflow-x-auto">
+            
+            <div className="space-y-4">
+              <h4 className="text-white font-semibold flex items-center gap-2 border-b border-gray-800 pb-2"><Calculator className="w-4 h-4 text-emerald-400" /> Financial Mechanics</h4>
+              <div>
+                <div className="text-gray-500 mb-1">// Total Sales Volume</div>
+                <div className="flex items-center gap-2 whitespace-nowrap text-gray-400">
+                  <span className="text-blue-400">Total Sales</span> = 
+                  <span>{formatNum(inputs.users)} users</span> × 
+                  <span>{inputs.txnsPerWeek} txns/week</span> × 
+                  <span>{inputs.weeksPerMonth} wks</span>
+                </div>
+                <div className="text-white mt-1">→ {formatNum(Math.round(totalMonthlyTxns))} total sales this month</div>
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-4 border-t border-gray-800">
+              <h4 className="text-white font-semibold flex items-center gap-2 border-b border-gray-800 pb-2"><Activity className="w-4 h-4 text-purple-400" /> Compute Processing Equations</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {computeProvider === 'gcp' ? (
+                  <div>
+                    <div className="text-gray-500 mb-1">// Cloud Run Compute Array</div>
+                    <div className="whitespace-nowrap text-gray-400">
+                      <span className="text-blue-400">Total Requests</span> = {formatNum(inputs.users)} × {inputs.requestsPerUserMonth}
+                      <div className="text-white">→ {formatNum(totalMonthlyBackendReqs)} total traffic array</div>
+                    </div>
+                    <div className="whitespace-nowrap text-gray-400 mt-3">
+                      <span className="text-blue-400">Compute Time</span> = ({formatNum(totalMonthlyBackendReqs)} × {(inputs.backendRequestTimeMs/1000).toFixed(3)}s) / {inputs.cloudRunConcurrency} (C_eff)
+                      <div className="text-white">→ {formatNum(Math.round(cr_total_compute_sec))} shared CPU seconds billed</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-gray-500 mb-1">// AWS App Runner Little's Law Array</div>
+                    <div className="whitespace-nowrap text-gray-400">
+                      <span className="text-amber-400">Peak RPS</span> = ({formatNum(totalMonthlyBackendReqs)} reqs × {inputs.peakTrafficPercentage}%) / ({formatNum(peakHoursPerMonth)} hrs × 3600s)
+                      <div className="text-white mt-1">→ Concurrency = {peakRps.toFixed(2)} RPS × {(inputs.backendRequestTimeMs/1000).toFixed(3)}s = {peakConcurrency.toFixed(2)} active reqs</div>
+                      <div className="text-amber-300 mt-1">→ Scaling needed = Ceil({peakConcurrency.toFixed(2)} / {inputs.awsAppRunnerConcurrencyLimit} C_max) = {peakInstancesNeeded} instances.</div>
+                    </div>
+                    <div className="whitespace-nowrap text-gray-400 mt-3">
+                      <span className="text-amber-400">Active Math Penalty</span> = ({peakInstancesNeeded} inst × Rate) - Baseline Provisioned Cost.
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div className="text-gray-500 mb-1">// DB Read/Write Matrix ({firestoreEdition})</div>
+                  <div className="whitespace-nowrap text-gray-400">
+                    <span className="text-orange-400">Reads</span> = {formatNum(totalMonthlyBackendReqs)} × {inputs.firestoreReadsReq}
+                    <div className="text-white">→ {formatNum(total_reads)} DB queries</div>
+                  </div>
+                  <div className="whitespace-nowrap text-gray-400 mt-3">
+                    <span className="text-orange-400">Writes</span> = {formatNum(totalMonthlyBackendReqs)} × {inputs.firestoreWritesReq}
+                    <div className="text-white">→ {formatNum(total_writes)} DB commits</div>
+                  </div>
+                  {firestoreEdition === 'enterprise' && (
+                    <div className="mt-2 text-indigo-400 italic text-xs">Using Enterprise tranche-based pricing methodology logic per 1M documents.</div>
+                  )}
+                </div>
+              </div>
+
+              {computeProvider === 'gcp' && inputs.minInstances > 0 && (
+                <div className="mt-4 bg-red-900/10 border border-red-900 p-3 rounded">
+                  <div className="text-red-400 mb-1">// Always-On Penalty Metric (GCP)</div>
+                  <div className="text-gray-400 text-xs">
+                    Instances ({inputs.minInstances}) × vCPU ({inputs.cloudRunVcpu}) × SEC_PER_MONTH ({formatNum(2592000)}) × IDLE_RATE ({GCP.CR_IDLE_PRICE_VCPU_SEC})
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4 pt-4 border-t border-gray-800">
+              <h4 className="text-white font-semibold flex items-center gap-2 border-b border-gray-800 pb-2"><MessageCircle className="w-4 h-4 text-emerald-400" /> WhatsApp Per-Message Matrix</h4>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <div className="text-gray-500 mb-1">// 2026 Window Algorithm</div>
+                  <div className="whitespace-nowrap text-gray-400">
+                    <span className="text-emerald-400">Total Utility</span> = {formatNum(inputs.users)} × {inputs.waUtilityMsgs} = {formatNum(totalUtilityMessages)}
+                  </div>
+                  <div className="whitespace-nowrap text-gray-400 mt-2">
+                    <span className="text-emerald-400">Free Volume</span> = {formatNum(totalUtilityMessages)} × {inputs.waUtilityInsideWindowPercent}% 
+                    <div className="text-white">→ {formatNum(Math.round(freeUtilityMessages))} msgs voided gracefully (24h Service Window match)</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-gray-500 mb-1">// Tiered Discount Tracker</div>
+                  <div className="whitespace-nowrap text-gray-400 text-xs mt-1">
+                    [Tier 1] 0-100k msgs @ ${currentWaRate.utility}
+                  </div>
+                  <div className="whitespace-nowrap text-gray-400 text-xs">
+                    [Tier 2] 100k-500k @ 5% discount
+                  </div>
+                  <div className="whitespace-nowrap text-gray-400 text-xs">
+                    [Tier 3] 500k+ @ 10% discount
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </main>
+    </div>
+  );
+}
+
 function InputGroup({ 
   label, 
   value, 
@@ -113,492 +1210,6 @@ function InputGroup({
         />
         {suffix && <span className="absolute right-3 text-gray-500 text-sm font-medium">{suffix}</span>}
       </div>
-    </div>
-  );
-}
-
-export default function App() {
-  const[displayCurrency, setDisplayCurrency] = useState<'NGN' | 'USD'>('NGN');
-  
-  const [inputs, setInputs] = useState({
-    // Global
-    usdToNgnRate: 1500,
-
-    // Product & Margin
-    productCost: 10000,
-    markupType: 'percentage' as 'percentage' | 'flat',
-    markupValue: 5,
-    
-    // Gateway Settings
-    gatewayProvider: 'paystack' as 'paystack' | 'flutterwave',
-    paystackPercentage: 1.5,
-    paystackFlatAmount: 100,
-    paystackFlatThreshold: 2500,
-    paystackCap: 2000,
-    flutterwavePercentage: 1.4,
-    flutterwaveCap: 2000,
-    
-    // WhatsApp Comms (Per Txn)
-    waMarketingMsgs: 0,
-    waUtilityOutside24h: 0,
-    
-    // Monthly Macro Settings
-    monthlyTxns: 5000,
-    
-    // Infrastructure (Per Txn Pool)
-    dbReadsPerTxn: 15,
-    dbWritesPerTxn: 4,
-    computeTimeMsPerTxn: 400,
-  });
-
-  const updateInput = (key: keyof typeof inputs, value: number | string) => {
-    setInputs(prev => ({ ...prev, [key]: value }));
-  };
-
-  const getConvertedVal = (usdVal: number) => {
-    return displayCurrency === 'NGN' ? usdVal * inputs.usdToNgnRate : usdVal;
-  };
-  const getConvertedNgn = (ngnVal: number) => {
-    return displayCurrency === 'USD' ? ngnVal / inputs.usdToNgnRate : ngnVal;
-  };
-
-  // --- 1. UNIT ECONOMICS (PER TRANSACTION) ---
-  const baseCost = inputs.productCost;
-  const markupAmount = inputs.markupType === 'percentage' 
-    ? baseCost * ((inputs.markupValue as number) / 100) 
-    : (inputs.markupValue as number);
-    
-  const sellingPrice = baseCost + markupAmount;
-
-  let gatewayFee = 0;
-  if (inputs.gatewayProvider === 'paystack') {
-    const calculatedFee = (sellingPrice * (inputs.paystackPercentage / 100)) + 
-                          (sellingPrice >= inputs.paystackFlatThreshold ? inputs.paystackFlatAmount : 0);
-    gatewayFee = Math.min(calculatedFee, inputs.paystackCap);
-  } else {
-    const calculatedFee = sellingPrice * (inputs.flutterwavePercentage / 100);
-    gatewayFee = Math.min(calculatedFee, inputs.flutterwaveCap);
-  }
-
-  // Base Gross Profit per transaction (before Server/WhatsApp fees)
-  const gbamUnitGrossProfit = sellingPrice - baseCost - gatewayFee;
-
-  // WhatsApp Unit Cost (Marketing and delayed utility)
-  const waUnitCostUSD = (inputs.waMarketingMsgs * WA_RATES.marketing) + (inputs.waUtilityOutside24h * WA_RATES.utility);
-  const waUnitCostNGN = waUnitCostUSD * inputs.usdToNgnRate;
-
-  const gbamUnitNetProfit = gbamUnitGrossProfit - waUnitCostNGN;
-
-  // --- 2. MACRO SCALE SIMULATOR (MONTHLY) ---
-  const totalTxns = inputs.monthlyTxns as number;
-  const totalMacroRevenue = gbamUnitGrossProfit * totalTxns;
-  const totalMacroWaCostNGN = waUnitCostNGN * totalTxns;
-
-  // Database Cost
-  const totalReads = totalTxns * inputs.dbReadsPerTxn;
-  const totalWrites = totalTxns * inputs.dbWritesPerTxn;
-  
-  const billableReads = Math.max(0, totalReads - FS.FREE_READS_MO);
-  const billableWrites = Math.max(0, totalWrites - FS.FREE_WRITES_MO);
-  const dbReadsCostUSD = (billableReads / 100000) * FS.PRICE_PER_100K_READS;
-  const dbWritesCostUSD = (billableWrites / 100000) * FS.PRICE_PER_100K_WRITES;
-
-  // Compute Cost
-  const avgReqsPerTxn = 5;
-  const totalReqs = totalTxns * avgReqsPerTxn;
-  const billableReqs = Math.max(0, totalReqs - GCP.FREE_REQS);
-  const crReqCostUSD = (billableReqs / 1000000) * GCP.PRICE_PER_M_REQS;
-
-  const totalVcpuSec = totalReqs * (inputs.computeTimeMsPerTxn / 1000);
-  const billableVcpuSec = Math.max(0, totalVcpuSec - GCP.FREE_VCPU_SEC);
-  const crVcpuCostUSD = billableVcpuSec * GCP.PRICE_VCPU_SEC;
-
-  const totalMemSec = totalVcpuSec * 0.5; // Fixed 0.5GB ram allocation assumption
-  const billableMemSec = Math.max(0, totalMemSec - GCP.FREE_MEM_SEC);
-  const crMemCostUSD = billableMemSec * GCP.PRICE_MEM_SEC;
-
-  const totalInfraCostUSD = dbReadsCostUSD + dbWritesCostUSD + crReqCostUSD + crVcpuCostUSD + crMemCostUSD;
-  const totalInfraCostNGN = totalInfraCostUSD * inputs.usdToNgnRate;
-
-  // The Grand Total
-  const finalMonthlyNetProfitNGN = totalMacroRevenue - totalMacroWaCostNGN - totalInfraCostNGN;
-
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] text-gray-900 font-sans selection:bg-gray-200 pb-16">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-semibold tracking-tight hidden sm:block">Gbam Unit Economics</span>
-          </div>
-          
-          <div className="flex items-center space-x-4 ml-auto">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-gray-400" />
-              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-                <button 
-                  onClick={() => setDisplayCurrency('NGN')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  NGN
-                </button>
-                <button 
-                  onClick={() => setDisplayCurrency('USD')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900 border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  USD
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12 space-y-10">
-        
-        {/* --- GLOBAL SETTINGS --- */}
-        <section className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-wrap gap-6 items-center">
-          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 w-full md:w-auto">
-            <Settings2 className="w-4 h-4" /> Global Env
-          </h2>
-          <div className="w-48">
-            <InputGroup label="Exchange Rate (USD to NGN)" value={inputs.usdToNgnRate} onChange={(v) => updateInput('usdToNgnRate', v)} prefix="₦" step="10" />
-          </div>
-        </section>
-
-        {/* --- SECTION 1: UNIT ECONOMICS --- */}
-        <section>
-          <div className="mb-6 max-w-2xl">
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">
-              Transaction Lifecycle (Unit Cost)
-            </h1>
-            <p className="text-gray-500 text-lg">
-              Calculate exactly what it costs to process a single user purchase from WhatsApp message to Checkout.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-5 space-y-6">
-              
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 space-y-6">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                      <Store className="w-5 h-5 text-emerald-500" />
-                      Product Pricing & Markup
-                    </h2>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <InputGroup label="Seller's Original Product Price" value={inputs.productCost} onChange={(v) => updateInput('productCost', v)} prefix="₦" />
-                    
-                    <div className="pt-2 border-t border-gray-100 flex flex-col space-y-2">
-                      <label className="text-sm font-medium text-gray-700">Gbam Markup Strategy</label>
-                      <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm p-1 bg-gray-50 gap-1">
-                        <button
-                          onClick={() => updateInput('markupType', 'percentage')}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded transition-all duration-200 ${inputs.markupType === 'percentage' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-600 hover:text-gray-800'}`}
-                        >
-                          Percentage (%)
-                        </button>
-                        <button
-                          onClick={() => updateInput('markupType', 'flat')}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded transition-all duration-200 ${inputs.markupType === 'flat' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-600 hover:text-gray-800'}`}
-                        >
-                          Flat Fee (₦)
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <InputGroup 
-                      label={inputs.markupType === 'percentage' ? "Markup Percentage" : "Flat Markup Amount"} 
-                      value={inputs.markupValue as number} 
-                      onChange={(v) => updateInput('markupValue', v)} 
-                      suffix={inputs.markupType === 'percentage' ? '%' : undefined}
-                      prefix={inputs.markupType === 'flat' ? '₦' : undefined}
-                      step={inputs.markupType === 'percentage' ? '0.1' : '10'}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 space-y-6">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                      <CreditCard className="w-5 h-5 text-blue-500" />
-                      Payment Gateway Cost
-                    </h2>
-                  </div>
-
-                  <div className="flex flex-col space-y-3">
-                    <div className="flex rounded-lg border border-gray-300 overflow-hidden shadow-sm p-1 bg-gray-50 gap-1">
-                      <button
-                        onClick={() => updateInput('gatewayProvider', 'paystack')}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded transition-all duration-200 ${inputs.gatewayProvider === 'paystack' ? 'bg-white text-blue-700 shadow-sm font-bold border border-blue-100' : 'text-gray-600 hover:text-gray-800'}`}
-                      >
-                        Paystack
-                      </button>
-                      <button
-                        onClick={() => updateInput('gatewayProvider', 'flutterwave')}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded transition-all duration-200 ${inputs.gatewayProvider === 'flutterwave' ? 'bg-white text-orange-600 shadow-sm font-bold border border-orange-100' : 'text-gray-600 hover:text-gray-800'}`}
-                      >
-                        Flutterwave
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {inputs.gatewayProvider === 'paystack' && (
-                    <div className="grid grid-cols-2 gap-4 text-xs text-gray-500 bg-blue-50 p-3 rounded-lg border border-blue-100">
-                      <div>Percentage: <b>{inputs.paystackPercentage}%</b></div>
-                      <div>Flat: <b>₦{inputs.paystackFlatAmount}</b> (&gt;₦{inputs.paystackFlatThreshold})</div>
-                    </div>
-                  )}
-                  {inputs.gatewayProvider === 'flutterwave' && (
-                    <div className="grid grid-cols-2 gap-4 text-xs text-gray-500 bg-orange-50 p-3 rounded-lg border border-orange-100">
-                      <div>Percentage: <b>{inputs.flutterwavePercentage}%</b></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-            <div className="lg:col-span-7 flex flex-col justify-center gap-6">
-              
-              {/* Unit Economics Receipt Card */}
-              <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden flex flex-col relative text-gray-300">
-                <div className="p-6 border-b border-gray-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><Receipt className="w-5 h-5 text-gray-400" /> Single Sale Receipt</h2>
-                  </div>
-                  
-                  <div className="space-y-3 font-mono text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Seller's Base Product</span>
-                      <span>{formatCurrency(getConvertedNgn(baseCost), displayCurrency)}</span>
-                    </div>
-                    <div className="flex justify-between text-emerald-400">
-                      <span>Gbam Markup Addition</span>
-                      <span>+ {formatCurrency(getConvertedNgn(markupAmount as number), displayCurrency)}</span>
-                    </div>
-                    <div className="pt-2 border-t border-dashed border-gray-700 flex justify-between text-lg text-white font-semibold">
-                      <span>Price Displayed to Customer</span>
-                      <span>{formatCurrency(getConvertedNgn(sellingPrice), displayCurrency)}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="p-6 font-mono text-sm space-y-3">
-                  <div className="text-gray-500 text-xs uppercase mb-2">// Gateway Payout Deductions</div>
-                  <div className="flex justify-between text-red-400">
-                    <span>Gateway Processing Fee</span>
-                    <span>- {formatCurrency(getConvertedNgn(gatewayFee), displayCurrency)}</span>
-                  </div>
-                  <div className="flex justify-between text-yellow-400">
-                    <span>Remittance to Seller</span>
-                    <span>- {formatCurrency(getConvertedNgn(baseCost), displayCurrency)}</span>
-                  </div>
-                  <div className="pt-3 border-t border-dashed border-gray-700 flex items-center justify-between">
-                    <span className="text-gray-200 font-semibold">Gross Profit per Transaction</span>
-                    <span className="text-2xl text-white font-bold tracking-tight">
-                      {formatCurrency(getConvertedNgn(gbamUnitGrossProfit), displayCurrency)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        <div className="h-px bg-gray-200" />
-
-        {/* --- SECTION 2: COMMUNICATION & LOCATION COSTS --- */}
-        <section>
-          <div className="mb-6 max-w-2xl">
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900 mb-2">
-              Conversational Overheads
-            </h1>
-            <p className="text-gray-500">
-              Calculate WhatsApp fees and mapping infrastructure based on Meta's 2026 free-tier models.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <MessageCircle className="w-5 h-5 text-emerald-500" />
-                WhatsApp Outbound Costs (Per Sale)
-              </h2>
-              <div className="space-y-4">
-                <InputGroup label="Marketing Casts (e.g Promo Blasts)" value={inputs.waMarketingMsgs as number} onChange={(v) => updateInput('waMarketingMsgs', v)} />
-                <InputGroup label="Delayed Utility (Outside 24h Window)" value={inputs.waUtilityOutside24h as number} onChange={(v) => updateInput('waUtilityOutside24h', v)} />
-                
-                <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-800">
-                  <b>The 2026 Advantage:</b> Since the buyer initiates the chat, the <b>Service Window</b> opens. Any standard replies and utility updates sent within 24 hours are <b>100% Free</b>. 
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6 flex flex-col justify-between">
-              <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                  <MapPin className="w-5 h-5 text-indigo-500" />
-                  Geocoding & Location
-                </h2>
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-sm text-indigo-800 space-y-2">
-                  <p><b>Status: Computationally Free.</b></p>
-                  <p>Because users send location pins natively through WhatsApp, the exact coordinates are forwarded to your backend. We rely strictly on Database GeoQueries to match nearby sellers.</p>
-                  <p>No Google Maps / AWS Location API integration is billed.</p>
-                </div>
-              </div>
-              
-              <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-gray-600 font-medium text-sm">Comms Cost per Transaction:</span>
-                <span className="text-lg font-bold text-gray-900">{formatCurrency(getConvertedNgn(waUnitCostNGN), displayCurrency)}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="h-px bg-gray-200" />
-
-        {/* --- SECTION 3: MACRO SCALE (THE BIG PICTURE) --- */}
-        <section>
-          <div className="mb-6 max-w-2xl">
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">
-              Macro Scale Simulator
-            </h1>
-            <p className="text-gray-500 text-lg">
-              Project your total monthly revenue against Google Cloud Database and Server costs.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-4 space-y-6">
-              
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6 space-y-6">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-amber-500" />
-                  Monthly Volume & Server
-                </h2>
-                <div className="space-y-4">
-                  <InputGroup label="Target Successful Monthly Sales" value={inputs.monthlyTxns as number} onChange={(v) => updateInput('monthlyTxns', v)} />
-                  
-                  <div className="pt-4 border-t border-gray-100 space-y-4">
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase">Backend Ops per transaction</h3>
-                    <InputGroup label="Firestore DB Reads" value={inputs.dbReadsPerTxn as number} onChange={(v) => updateInput('dbReadsPerTxn', v)} />
-                    <InputGroup label="Firestore DB Writes" value={inputs.dbWritesPerTxn as number} onChange={(v) => updateInput('dbWritesPerTxn', v)} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6">
-                <h3 className="text-sm font-semibold flex items-center gap-2 text-gray-900 mb-4">
-                  <Server className="w-4 h-4 text-blue-500" /> Server Free Tiers Claimed
-                </h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">DB Reads</span>
-                    <span className="text-gray-900 font-medium">1,500,000 / mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">DB Writes</span>
-                    <span className="text-gray-900 font-medium">600,000 / mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Compute Reqs</span>
-                    <span className="text-gray-900 font-medium">2,000,000 / mo</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <div className="lg:col-span-8 space-y-6">
-              
-              {/* Macro Cost Breakdown Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-6 border-b border-gray-100 bg-gray-50">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total Gateway Fees Handed Over</h3>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(getConvertedNgn(gatewayFee * totalTxns), displayCurrency)}</p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-                  <div className="p-6 border-b border-gray-100 bg-gray-50">
-                    <h3 className="text-sm font-medium text-gray-500 mb-1">Total Meta WhatsApp Bill</h3>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(getConvertedNgn(totalMacroWaCostNGN), displayCurrency)}</p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col md:col-span-2 relative border-blue-200">
-                  <div className="p-6 border-b border-gray-100 bg-gradient-to-b from-blue-50/50 to-white flex justify-between items-center">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center">
-                          <Cloud className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <h2 className="text-lg font-semibold text-gray-900">Total Infra Bill (GCP + Firebase)</h2>
-                      </div>
-                      <p className="text-sm text-gray-500 font-medium">Monthly Cloud Expenses</p>
-                    </div>
-                    <p className="text-3xl font-bold text-gray-900">{formatCurrency(getConvertedVal(totalInfraCostUSD), displayCurrency)}</p>
-                  </div>
-                  <div className="p-6 bg-white text-sm">
-                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-100">
-                      <span className="text-gray-500">Database Engine</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(getConvertedVal(dbReadsCostUSD + dbWritesCostUSD), displayCurrency)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Compute Engine (Cloud Run)</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(getConvertedVal(crReqCostUSD + crVcpuCostUSD + crMemCostUSD), displayCurrency)}</span>
-                    </div>
-                    {totalInfraCostUSD === 0 && (
-                      <div className="mt-4 bg-emerald-50 text-emerald-700 text-xs p-2 rounded flex items-center gap-2">
-                        <CheckSquare className="w-4 h-4" /> Your volume is 100% covered by Google Cloud Free Tiers!
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Huge Final Profit Block */}
-              <div className="bg-gray-900 rounded-2xl shadow-xl p-8 relative overflow-hidden">
-                <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-emerald-500 rounded-full blur-3xl opacity-20 pointer-events-none"></div>
-                <h3 className="text-gray-400 font-medium text-lg mb-2">Estimated Gbam Net Profit</h3>
-                <div className="text-5xl font-black text-white tracking-tight mb-6">
-                  {formatCurrency(getConvertedNgn(finalMonthlyNetProfitNGN), displayCurrency)}
-                  <span className="text-gray-500 text-xl font-medium ml-2">/ month</span>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-800">
-                  <div>
-                    <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">Gross Margin</div>
-                    <div className="text-gray-200 font-semibold">{formatCurrency(getConvertedNgn(totalMacroRevenue), displayCurrency)}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">WhatsApp Bill</div>
-                    <div className="text-red-400 font-semibold">- {formatCurrency(getConvertedNgn(totalMacroWaCostNGN), displayCurrency)}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">Infra Bill</div>
-                    <div className="text-red-400 font-semibold">- {formatCurrency(getConvertedNgn(totalInfraCostNGN), displayCurrency)}</div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-      </main>
     </div>
   );
 }
