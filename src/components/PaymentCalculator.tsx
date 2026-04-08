@@ -5,7 +5,7 @@ import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { InputGroup } from './ui/InputGroup';
 
-export default function PaymentCalculator({ formatterNGN }: any) {
+export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -79,6 +79,10 @@ export default function PaymentCalculator({ formatterNGN }: any) {
   }
   const flutterwaveTotalPerTxn = flutterwaveProcessingFee;
   const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
+  const currentCost = gatewayProvider === 'paystack' ? paystackMonthlyCost : flutterwaveMonthlyCost;
+  React.useEffect(() => {
+    if (onCostChange) onCostChange(currentCost);
+  }, [currentCost, onCostChange]);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">

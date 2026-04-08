@@ -8,7 +8,7 @@ import { Checkbox } from './ui/Checkbox';
 import { formatNum } from '../utils/formatters';
 import { GCP, AWS, FS } from '../utils/constants';
 
-export default function CloudCalculator({ formatterUSD }: any) {
+export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -145,6 +145,10 @@ export default function CloudCalculator({ formatterUSD }: any) {
 
   const total_firestore_cost_usd = fs_reads_cost + fs_writes_cost + fs_storage_cost;
   const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
+
+  React.useEffect(() => {
+    if (onCostChange) onCostChange(total_backend_cost_usd);
+  }, [total_backend_cost_usd, onCostChange]);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">

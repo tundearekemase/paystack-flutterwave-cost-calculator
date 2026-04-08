@@ -5,7 +5,7 @@ import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
 import { WA_RATES } from '../utils/constants';
 
-export default function WhatsAppCalculator({ formatterUSD }: any) {
+export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) {
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -71,6 +71,10 @@ export default function WhatsAppCalculator({ formatterUSD }: any) {
   }
 
   const totalWaCostUsd = waMarketingCostUsd + waAuthCostUsd + waServiceCostUsd + waUtilityCostUsd;
+
+  React.useEffect(() => {
+    if (onCostChange) onCostChange(totalWaCostUsd);
+  }, [totalWaCostUsd, onCostChange]);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">

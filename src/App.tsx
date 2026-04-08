@@ -4,12 +4,37 @@ import GlobalDashboard from './components/GlobalDashboard';
 import PaymentCalculator from './components/PaymentCalculator';
 import CloudCalculator from './components/CloudCalculator';
 import WhatsAppCalculator from './components/WhatsAppCalculator';
+import PayoutCalculator from './components/PayoutCalculator';
 import { formatNGNBase, formatUSDBase } from './utils/formatters';
 import { InputGroup } from './components/ui/InputGroup';
 
 export default function App() {
   const [displayCurrency, setDisplayCurrency] = useState<'NGN' | 'USD'>('NGN');
   const [usdToNgnRate, setUsdToNgnRate] = useState(1500);
+
+  const [costs, setCosts] = useState({
+    paymentNGN: 0,
+    cloudUSD: 0,
+    whatsappUSD: 0,
+    payoutNative: 0,
+    payoutCountry: 'NG',
+  });
+
+  const getPayoutCostInNGN = (val: number, country: string, usdRate: number) => {
+    switch (country) {
+      case 'NG': return val;
+      case 'GH': return val * 105;
+      case 'KE': return val * 11;
+      case 'ZA': return val * 80;
+      case 'INTL': return val * usdRate;
+      default: return val;
+    }
+  };
+
+  const totalMonthlyNGN = costs.paymentNGN +
+    (costs.cloudUSD * usdToNgnRate) +
+    (costs.whatsappUSD * usdToNgnRate) +
+    getPayoutCostInNGN(costs.payoutNative, costs.payoutCountry, usdToNgnRate);
 
   const formatterNGN = (amount: number) => formatNGNBase(amount, displayCurrency, usdToNgnRate);
   const formatterUSD = (amount: number) => formatUSDBase(amount, displayCurrency, usdToNgnRate);
@@ -22,36 +47,36 @@ export default function App() {
             <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center shadow-sm">
               <Calculator className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight hidden sm:block">Levytate</span>
+            <span className="text-xl font-bold tracking-tight hidden sm:block">Levytate UpStack</span>
           </div>
-          
+
           <div className="flex items-center space-x-4">
-             {/* Small inline Input for Exchange Rate implicitly handled */}
-             <div className="flex items-center gap-2 mr-2">
-                <span className="text-xs text-gray-500 font-medium">USD to NGN:</span>
-                <input 
-                  type="number" 
-                  value={usdToNgnRate || ''} 
-                  onChange={(e) => setUsdToNgnRate(parseFloat(e.target.value) || 0)}
-                  className="w-16 px-1.5 py-0.5 text-right font-medium text-xs text-gray-900 border border-gray-200 rounded focus:border-gray-900 focus:outline-none hide-arrows transition-colors"
-                />
-             </div>
+            {/* Small inline Input for Exchange Rate implicitly handled */}
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-xs text-gray-500 font-medium">USD to NGN:</span>
+              <input
+                type="number"
+                value={usdToNgnRate || ''}
+                onChange={(e) => setUsdToNgnRate(parseFloat(e.target.value) || 0)}
+                className="w-16 px-1.5 py-0.5 text-right font-medium text-xs text-gray-900 border border-gray-200 rounded focus:border-gray-900 focus:outline-none hide-arrows transition-colors"
+              />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
+
           <GlobalDashboard>
             <div className="flex bg-gray-100/80 p-0.5 rounded-lg border border-gray-200 shadow-sm">
-              <button 
+              <button
                 onClick={() => setDisplayCurrency('NGN')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 NGN
               </button>
-              <button 
+              <button
                 onClick={() => setDisplayCurrency('USD')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
               >
@@ -60,14 +85,44 @@ export default function App() {
             </div>
           </GlobalDashboard>
 
-          <PaymentCalculator formatterNGN={formatterNGN} />
-          
-          <CloudCalculator formatterUSD={formatterUSD} />
+          <PaymentCalculator
+            formatterNGN={formatterNGN}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, paymentNGN: cost || 0 }))}
+          />
 
-          <WhatsAppCalculator formatterUSD={formatterUSD} />
+          <PayoutCalculator
+            onCostChange={(cost: number, country: string) => setCosts(prev => ({ ...prev, payoutNative: cost || 0, payoutCountry: country }))}
+          />
+
+          <CloudCalculator
+            formatterUSD={formatterUSD}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, cloudUSD: cost || 0 }))}
+          />
+
+          <WhatsAppCalculator
+            formatterUSD={formatterUSD}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, whatsappUSD: cost || 0 }))}
+          />
 
         </div>
       </main>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 text-white shadow-[0_-10px_30px_rgba(0,0,0,0.15)] z-40">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex w-10 h-10 bg-indigo-500/20 border border-indigo-500/30 rounded-xl items-center justify-center shadow-inner">
+              <Calculator className="w-5 h-5 text-indigo-300" />
+            </div>
+            <div className="text-center sm:text-left">
+              <h3 className="text-sm font-bold text-gray-200">Total Estimated Monthly Cost</h3>
+              <p className="text-xs text-gray-400">Aggregated sum of all platform charges</p>
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-0 text-center sm:text-right">
+            <div className="text-2xl font-black text-white tracking-tight">{formatterNGN(totalMonthlyNGN)} <span className="text-gray-400 text-sm font-medium">/mo</span></div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
