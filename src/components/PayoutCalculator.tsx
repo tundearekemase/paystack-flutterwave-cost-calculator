@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
+import { Switch } from './ui/Switch';
 
 export default function PayoutCalculator({ onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const [gatewayProvider, setGatewayProvider] = useState<'paystack' | 'flutterwave'>('paystack');
   const [country, setCountry] = useState<'NG' | 'GH' | 'KE' | 'ZA' | 'INTL'>('NG');
   const [destination, setDestination] = useState<'bank' | 'mobile'>('bank');
@@ -80,8 +82,8 @@ export default function PayoutCalculator({ onCostChange }: any) {
   const totalDeductedMonthly = totalAmountSentMonthly + totalMonthlyCost;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(totalMonthlyCost, country);
-  }, [totalMonthlyCost, country, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? totalMonthlyCost : 0, country);
+  }, [totalMonthlyCost, country, enabled, onCostChange]);
 
   let maxAmount = 1000000;
   let stepAmount = 100;
@@ -91,15 +93,17 @@ export default function PayoutCalculator({ onCostChange }: any) {
   else if (country === 'KE') { maxAmount = 300000; stepAmount = 100; }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900 flex items-center gap-2">
-          <Send className="w-5 h-5 text-indigo-600" /> Transfers & Payouts
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm overflow-hidden flex flex-col min-h-0 transition-all duration-300`}>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight flex items-center gap-2 transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>
+          <Send className={`w-5 h-5 transition-colors duration-300 ${enabled ? 'text-indigo-600' : 'text-gray-400'}`} /> Transfers & Payouts
         </h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6 flex-grow">
-        <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
+          <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
           <button 
             onClick={() => setGatewayProvider('paystack')} 
             className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${gatewayProvider === 'paystack' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
@@ -200,6 +204,7 @@ export default function PayoutCalculator({ onCostChange }: any) {
              </div>
            </div>
         )}
+      </div>
       </div>
     </div>
   );

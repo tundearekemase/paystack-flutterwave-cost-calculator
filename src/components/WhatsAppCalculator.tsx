@@ -4,8 +4,10 @@ import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
 import { WA_RATES } from '../utils/constants';
+import { Switch } from './ui/Switch';
 
 export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -73,17 +75,19 @@ export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) 
   const totalWaCostUsd = waMarketingCostUsd + waAuthCostUsd + waServiceCostUsd + waUtilityCostUsd;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(totalWaCostUsd);
-  }, [totalWaCostUsd, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? totalWaCostUsd : 0);
+  }, [totalWaCostUsd, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">WhatsApp API</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>WhatsApp API</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6 flex-grow">
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
         
         {/* Sync Controls */}
         <div className="flex items-center justify-between mb-2">
@@ -201,6 +205,7 @@ export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) 
             <MessageCircle className="w-5 h-5 text-indigo-400" />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ src/
       Checkbox.tsx
       InputGroup.tsx
       SliderInput.tsx
+      Switch.tsx
     CloudCalculator.tsx
     GlobalDashboard.tsx
     PaymentCalculator.tsx
@@ -64,212 +65,34 @@ vite.config.ts
 
 # Files
 
-## File: src/components/PayoutCalculator.tsx
+## File: src/components/ui/Switch.tsx
 ```typescript
-import React, { useState, useEffect } from 'react';
-import { Send } from 'lucide-react';
-import { SliderInput } from './ui/SliderInput';
-import { formatNum } from '../utils/formatters';
+import React from 'react';
 
-export default function PayoutCalculator({ onCostChange }: any) {
-  const [gatewayProvider, setGatewayProvider] = useState<'paystack' | 'flutterwave'>('paystack');
-  const [country, setCountry] = useState<'NG' | 'GH' | 'KE' | 'ZA' | 'INTL'>('NG');
-  const [destination, setDestination] = useState<'bank' | 'mobile'>('bank');
-  const [intlRegion, setIntlRegion] = useState<'USA' | 'UK' | 'SEPA'>('USA');
-  
-  const [transferAmount, setTransferAmount] = useState(50000);
-  const [numberOfPayouts, setNumberOfPayouts] = useState(100);
+interface SwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}
 
-  // Adjust default amounts when country changes
-  useEffect(() => {
-    if (country === 'NG') setTransferAmount(50000);
-    else if (country === 'GH') setTransferAmount(1000);
-    else if (country === 'KE') setTransferAmount(5000);
-    else if (country === 'ZA') setTransferAmount(1000);
-    else if (country === 'INTL') setTransferAmount(500);
-  }, [country]);
-
-  // calculations
-  let fee = 0;
-  let taxes = 0;
-  let currencyStr = 'NGN';
-  let isSupported = true;
-
-  switch (country) {
-    case 'NG':
-      currencyStr = '₦';
-      if (transferAmount <= 5000) fee = 10;
-      else if (transferAmount <= 50000) fee = 25;
-      else fee = 50;
-
-      if (transferAmount >= 10000) taxes = 50;
-      break;
-
-    case 'GH':
-      currencyStr = 'GH₵';
-      if (gatewayProvider === 'paystack') {
-        fee = destination === 'mobile' ? 1 : 8;
-      } else {
-        fee = destination === 'mobile' ? (transferAmount * 0.015) : 10;
-      }
-      break;
-
-    case 'KE':
-      currencyStr = 'KES';
-      if (gatewayProvider === 'paystack') {
-        if (transferAmount <= 1500) fee = 20;
-        else if (transferAmount <= 20000) fee = 40;
-        else fee = 60;
-      } else {
-        fee = 100;
-      }
-      break;
-
-    case 'ZA':
-      currencyStr = 'R';
-      if (gatewayProvider === 'paystack') fee = 3;
-      else fee = 10;
-      break;
-
-    case 'INTL':
-      if (gatewayProvider === 'paystack') {
-        isSupported = false;
-      } else {
-        if (intlRegion === 'USA') { fee = 40; currencyStr = '$'; }
-        else if (intlRegion === 'UK') { fee = 35; currencyStr = '£'; }
-        else { fee = 35; currencyStr = '€'; }
-      }
-      break;
-  }
-
-  const totalPerTransfer = fee + taxes;
-  const totalMonthlyCost = totalPerTransfer * numberOfPayouts;
-  const totalAmountSentMonthly = transferAmount * numberOfPayouts;
-  const totalDeductedMonthly = totalAmountSentMonthly + totalMonthlyCost;
-
-  React.useEffect(() => {
-    if (onCostChange) onCostChange(totalMonthlyCost, country);
-  }, [totalMonthlyCost, country, onCostChange]);
-
-  let maxAmount = 1000000;
-  let stepAmount = 100;
-  if(country === 'INTL') { maxAmount = 10000; stepAmount = 10; }
-  else if (country === 'ZA') { maxAmount = 50000; stepAmount = 50; }
-  else if (country === 'GH') { maxAmount = 50000; stepAmount = 50; }
-  else if (country === 'KE') { maxAmount = 300000; stepAmount = 100; }
-
+export function Switch({ checked, onChange, label, disabled = false }: SwitchProps) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-0">
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900 flex items-center gap-2">
-          <Send className="w-5 h-5 text-indigo-600" /> Transfers & Payouts
-        </h2>
-      </div>
-
-      <div className="p-5 space-y-6 flex-grow">
-        <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
-          <button 
-            onClick={() => setGatewayProvider('paystack')} 
-            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${gatewayProvider === 'paystack' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Paystack
-          </button>
-          <button 
-            onClick={() => setGatewayProvider('flutterwave')} 
-            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${gatewayProvider === 'flutterwave' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            Flutterwave
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Region / Country</label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'NG', label: 'Nigeria' },
-                { id: 'GH', label: 'Ghana' },
-                { id: 'KE', label: 'Kenya' },
-                { id: 'ZA', label: 'South Africa' },
-                { id: 'INTL', label: 'International' },
-              ].map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => setCountry(c.id as any)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md border ${country === c.id ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {country === 'GH' && (
-            <div className="flex rounded bg-gray-100 p-1 border border-gray-200 shadow-inner">
-              <button onClick={() => setDestination('bank')} className={`flex-1 py-1 text-xs font-semibold rounded ${destination === 'bank' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Bank Account</button>
-              <button onClick={() => setDestination('mobile')} className={`flex-1 py-1 text-xs font-semibold rounded ${destination === 'mobile' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Mobile Money</button>
-            </div>
-          )}
-
-          {country === 'INTL' && (
-             <div className="flex rounded bg-gray-100 p-1 border border-gray-200 shadow-inner">
-               <button onClick={() => setIntlRegion('USA')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'USA' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>USA (USD)</button>
-               <button onClick={() => setIntlRegion('UK')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'UK' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>UK (GBP)</button>
-               <button onClick={() => setIntlRegion('SEPA')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'SEPA' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>SEPA (EUR)</button>
-             </div>
-          )}
-
-          <div className="pt-2 border-t border-gray-100 space-y-3">
-             <SliderInput 
-               label={`Amount per Payout`}
-               disabled={false} 
-               value={transferAmount} 
-               onChange={setTransferAmount} 
-               min={stepAmount} max={maxAmount} step={stepAmount}
-             />
-             <div className="text-right text-xs font-bold text-gray-800 -mt-2 mb-2">{currencyStr}{formatNum(transferAmount)}</div>
-             
-             <SliderInput 
-               label="Monthly Payouts (Volume)" 
-               disabled={false} 
-               value={numberOfPayouts} 
-               onChange={setNumberOfPayouts} 
-               min={1} max={10000} step={1}
-             />
-          </div>
+    <label className={`flex items-center cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+      {label && <span className="mr-3 text-sm font-semibold text-gray-700">{label}</span>}
+      <div className="relative">
+        <input 
+          type="checkbox" 
+          className="sr-only" 
+          checked={checked} 
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+        />
+        <div className={`block w-10 h-6 rounded-full transition-colors duration-300 ease-in-out shadow-inner ${checked ? 'bg-indigo-600' : 'bg-gray-300'}`}></div>
+        <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full shadow transition-transform duration-300 ease-in-out flex items-center justify-center ${checked ? 'translate-x-4' : ''}`}>
         </div>
       </div>
-
-      <div className="p-4 bg-gray-50/50 space-y-3 mt-auto">
-        {!isSupported ? (
-           <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100 text-sm font-medium text-center shadow-sm">
-             International transfers are not supported by Paystack currently. Switch to Flutterwave.
-           </div>
-        ) : (
-           <div className="bg-white rounded-xl shadow-md shadow-gray-100 border border-gray-200 overflow-hidden">
-             <div className="p-4 bg-white flex justify-between items-center border-b border-gray-100">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 mb-0.5">Monthly Fee Cost</h3>
-                  <p className="text-xs text-gray-500">Fees + Taxes</p>
-                </div>
-                <p className="text-2xl font-bold text-gray-900 tracking-tight">{currencyStr}{formatNum(totalMonthlyCost)}</p>
-             </div>
-             <div className="p-4 bg-gray-50/50 space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-gray-500">Gateway Fee per Txn:</span><span className="font-semibold">{currencyStr}{formatNum(fee)}</span></div>
-                {taxes > 0 && <div className="flex justify-between"><span className="text-gray-500">Stamp Duty / Taxes:</span><span className="font-semibold">{currencyStr}{formatNum(taxes)}</span></div>}
-                <div className="flex justify-between text-gray-900 font-semibold"><span className="">Total Fee per Txn:</span><span className="">{currencyStr}{formatNum(totalPerTransfer)}</span></div>
-                
-                <div className="pt-2 mt-2 border-t border-gray-200">
-                   <div className="flex justify-between text-indigo-700 font-bold text-xs">
-                     <span>Gross Ded. from Balance:</span>
-                     <span>{currencyStr}{formatNum(totalDeductedMonthly)}</span>
-                   </div>
-                </div>
-             </div>
-           </div>
-        )}
-      </div>
-    </div>
+    </label>
   );
 }
 ```
@@ -396,6 +219,221 @@ export function SliderInput({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
       />
+    </div>
+  );
+}
+```
+
+## File: src/components/PayoutCalculator.tsx
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Send } from 'lucide-react';
+import { SliderInput } from './ui/SliderInput';
+import { formatNum } from '../utils/formatters';
+import { Switch } from './ui/Switch';
+
+export default function PayoutCalculator({ onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
+  const [gatewayProvider, setGatewayProvider] = useState<'paystack' | 'flutterwave'>('paystack');
+  const [country, setCountry] = useState<'NG' | 'GH' | 'KE' | 'ZA' | 'INTL'>('NG');
+  const [destination, setDestination] = useState<'bank' | 'mobile'>('bank');
+  const [intlRegion, setIntlRegion] = useState<'USA' | 'UK' | 'SEPA'>('USA');
+  
+  const [transferAmount, setTransferAmount] = useState(50000);
+  const [numberOfPayouts, setNumberOfPayouts] = useState(100);
+
+  // Adjust default amounts when country changes
+  useEffect(() => {
+    if (country === 'NG') setTransferAmount(50000);
+    else if (country === 'GH') setTransferAmount(1000);
+    else if (country === 'KE') setTransferAmount(5000);
+    else if (country === 'ZA') setTransferAmount(1000);
+    else if (country === 'INTL') setTransferAmount(500);
+  }, [country]);
+
+  // calculations
+  let fee = 0;
+  let taxes = 0;
+  let currencyStr = 'NGN';
+  let isSupported = true;
+
+  switch (country) {
+    case 'NG':
+      currencyStr = '₦';
+      if (transferAmount <= 5000) fee = 10;
+      else if (transferAmount <= 50000) fee = 25;
+      else fee = 50;
+
+      if (transferAmount >= 10000) taxes = 50;
+      break;
+
+    case 'GH':
+      currencyStr = 'GH₵';
+      if (gatewayProvider === 'paystack') {
+        fee = destination === 'mobile' ? 1 : 8;
+      } else {
+        fee = destination === 'mobile' ? (transferAmount * 0.015) : 10;
+      }
+      break;
+
+    case 'KE':
+      currencyStr = 'KES';
+      if (gatewayProvider === 'paystack') {
+        if (transferAmount <= 1500) fee = 20;
+        else if (transferAmount <= 20000) fee = 40;
+        else fee = 60;
+      } else {
+        fee = 100;
+      }
+      break;
+
+    case 'ZA':
+      currencyStr = 'R';
+      if (gatewayProvider === 'paystack') fee = 3;
+      else fee = 10;
+      break;
+
+    case 'INTL':
+      if (gatewayProvider === 'paystack') {
+        isSupported = false;
+      } else {
+        if (intlRegion === 'USA') { fee = 40; currencyStr = '$'; }
+        else if (intlRegion === 'UK') { fee = 35; currencyStr = '£'; }
+        else { fee = 35; currencyStr = '€'; }
+      }
+      break;
+  }
+
+  const totalPerTransfer = fee + taxes;
+  const totalMonthlyCost = totalPerTransfer * numberOfPayouts;
+  const totalAmountSentMonthly = transferAmount * numberOfPayouts;
+  const totalDeductedMonthly = totalAmountSentMonthly + totalMonthlyCost;
+
+  React.useEffect(() => {
+    if (onCostChange) onCostChange(enabled ? totalMonthlyCost : 0, country);
+  }, [totalMonthlyCost, country, enabled, onCostChange]);
+
+  let maxAmount = 1000000;
+  let stepAmount = 100;
+  if(country === 'INTL') { maxAmount = 10000; stepAmount = 10; }
+  else if (country === 'ZA') { maxAmount = 50000; stepAmount = 50; }
+  else if (country === 'GH') { maxAmount = 50000; stepAmount = 50; }
+  else if (country === 'KE') { maxAmount = 300000; stepAmount = 100; }
+
+  return (
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm overflow-hidden flex flex-col min-h-0 transition-all duration-300`}>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight flex items-center gap-2 transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>
+          <Send className={`w-5 h-5 transition-colors duration-300 ${enabled ? 'text-indigo-600' : 'text-gray-400'}`} /> Transfers & Payouts
+        </h2>
+        <Switch checked={enabled} onChange={setEnabled} />
+      </div>
+
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
+          <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
+          <button 
+            onClick={() => setGatewayProvider('paystack')} 
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${gatewayProvider === 'paystack' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Paystack
+          </button>
+          <button 
+            onClick={() => setGatewayProvider('flutterwave')} 
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all duration-200 ${gatewayProvider === 'flutterwave' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Flutterwave
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Region / Country</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 'NG', label: 'Nigeria' },
+                { id: 'GH', label: 'Ghana' },
+                { id: 'KE', label: 'Kenya' },
+                { id: 'ZA', label: 'South Africa' },
+                { id: 'INTL', label: 'International' },
+              ].map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setCountry(c.id as any)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md border ${country === c.id ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {country === 'GH' && (
+            <div className="flex rounded bg-gray-100 p-1 border border-gray-200 shadow-inner">
+              <button onClick={() => setDestination('bank')} className={`flex-1 py-1 text-xs font-semibold rounded ${destination === 'bank' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Bank Account</button>
+              <button onClick={() => setDestination('mobile')} className={`flex-1 py-1 text-xs font-semibold rounded ${destination === 'mobile' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Mobile Money</button>
+            </div>
+          )}
+
+          {country === 'INTL' && (
+             <div className="flex rounded bg-gray-100 p-1 border border-gray-200 shadow-inner">
+               <button onClick={() => setIntlRegion('USA')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'USA' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>USA (USD)</button>
+               <button onClick={() => setIntlRegion('UK')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'UK' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>UK (GBP)</button>
+               <button onClick={() => setIntlRegion('SEPA')} className={`flex-1 py-1 text-xs font-semibold rounded ${intlRegion === 'SEPA' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>SEPA (EUR)</button>
+             </div>
+          )}
+
+          <div className="pt-2 border-t border-gray-100 space-y-3">
+             <SliderInput 
+               label={`Amount per Payout`}
+               disabled={false} 
+               value={transferAmount} 
+               onChange={setTransferAmount} 
+               min={stepAmount} max={maxAmount} step={stepAmount}
+             />
+             <div className="text-right text-xs font-bold text-gray-800 -mt-2 mb-2">{currencyStr}{formatNum(transferAmount)}</div>
+             
+             <SliderInput 
+               label="Monthly Payouts (Volume)" 
+               disabled={false} 
+               value={numberOfPayouts} 
+               onChange={setNumberOfPayouts} 
+               min={1} max={10000} step={1}
+             />
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 bg-gray-50/50 space-y-3 mt-auto">
+        {!isSupported ? (
+           <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100 text-sm font-medium text-center shadow-sm">
+             International transfers are not supported by Paystack currently. Switch to Flutterwave.
+           </div>
+        ) : (
+           <div className="bg-white rounded-xl shadow-md shadow-gray-100 border border-gray-200 overflow-hidden">
+             <div className="p-4 bg-white flex justify-between items-center border-b border-gray-100">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-0.5">Monthly Fee Cost</h3>
+                  <p className="text-xs text-gray-500">Fees + Taxes</p>
+                </div>
+                <p className="text-2xl font-bold text-gray-900 tracking-tight">{currencyStr}{formatNum(totalMonthlyCost)}</p>
+             </div>
+             <div className="p-4 bg-gray-50/50 space-y-2 text-xs">
+                <div className="flex justify-between"><span className="text-gray-500">Gateway Fee per Txn:</span><span className="font-semibold">{currencyStr}{formatNum(fee)}</span></div>
+                {taxes > 0 && <div className="flex justify-between"><span className="text-gray-500">Stamp Duty / Taxes:</span><span className="font-semibold">{currencyStr}{formatNum(taxes)}</span></div>}
+                <div className="flex justify-between text-gray-900 font-semibold"><span className="">Total Fee per Txn:</span><span className="">{currencyStr}{formatNum(totalPerTransfer)}</span></div>
+                
+                <div className="pt-2 mt-2 border-t border-gray-200">
+                   <div className="flex justify-between text-indigo-700 font-bold text-xs">
+                     <span>Gross Ded. from Balance:</span>
+                     <span>{currencyStr}{formatNum(totalDeductedMonthly)}</span>
+                   </div>
+                </div>
+             </div>
+           </div>
+        )}
+      </div>
+      </div>
     </div>
   );
 }
@@ -568,22 +606,6 @@ GEMINI_API_KEY="MY_GEMINI_API_KEY"
 APP_URL="MY_APP_URL"
 ```
 
-## File: index.html
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-```
-
 ## File: metadata.json
 ```json
 {
@@ -651,6 +673,189 @@ export default defineConfig(({mode}) => {
 });
 ```
 
+## File: src/components/GlobalDashboard.tsx
+```typescript
+import React, { useState } from 'react';
+import { Settings2, Database, MessageCircle, X } from 'lucide-react';
+import { useGlobalStore } from '../store/useGlobalStore';
+
+function CompactInput({ value, onChange }: any) {
+  return (
+    <input 
+      type="number" 
+      value={value === 0 ? '' : value} 
+      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      className="w-16 px-1 py-0.5 text-right font-medium text-gray-900 bg-transparent border-b border-dashed border-gray-400 focus:border-gray-900 focus:outline-none hover:border-gray-900 hide-arrows transition-colors"
+    />
+  );
+}
+
+function AdvancedMultipliers() {
+  const globalStore = useGlobalStore();
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+        title="Advanced Traffic Multipliers"
+      >
+        <Settings2 className="w-4 h-4" />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Traffic Multipliers</h3>
+              <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1 border-b pb-1">
+                   <Database className="w-3 h-3" /> Cloud & Data
+                </div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">DB Reads</span><CompactInput value={globalStore.databaseReadsWritesPerTransaction.reads} onChange={(v: number) => globalStore.setDatabaseOperations('reads', v)} /></div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">DB Writes</span><CompactInput value={globalStore.databaseReadsWritesPerTransaction.writes} onChange={(v: number) => globalStore.setDatabaseOperations('writes', v)} /></div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Egress MB</span><CompactInput value={globalStore.networkEgressMBPerTransaction} onChange={globalStore.setNetworkEgressMB} /></div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1 border-b pb-1">
+                   <MessageCircle className="w-3 h-3" /> WhatsApp
+                </div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Utility</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.utilityTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('utilityTemplates', v)} /></div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Marketing</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.marketingTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('marketingTemplates', v)} /></div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Auth</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.authenticationTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('authenticationTemplates', v)} /></div>
+                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Free Replies</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.freeReplies} onChange={(v: number) => globalStore.setWhatsappMessages('freeReplies', v)} /></div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function GlobalDashboard({ children }: any) {
+  const globalStore = useGlobalStore();
+
+  return (
+    <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm overflow-visible flex items-center justify-between p-3 px-5 mb-6 col-span-full sticky top-[72px] z-20">
+      <div className="flex flex-col lg:flex-row lg:items-center space-y-2 lg:space-y-0 lg:space-x-8">
+        <h2 className="text-base font-bold text-gray-900 tracking-tight whitespace-nowrap">Global Assumptions</h2>
+        
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <div className="flex items-center text-gray-600">
+            <span className="mr-2">Monthly Active Users:</span>
+            <CompactInput value={globalStore.monthlyActiveUsers} onChange={globalStore.setMonthlyActiveUsers} />
+          </div>
+          
+          <div className="flex items-center text-gray-600">
+            <span className="mr-2">Txns per User/Month:</span>
+            <CompactInput value={globalStore.transactionsPerUserMonthly} onChange={globalStore.setTransactionsPerUserMonthly} />
+          </div>
+          
+          <div className="flex items-center text-gray-600">
+            <span className="mr-2">Average Cart Value:</span>
+            <CompactInput value={globalStore.averageCartValue} onChange={globalStore.setAverageCartValue} />
+            <span className="ml-1 text-gray-400">₦</span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center space-x-3">
+        {children}
+        <div className="hidden sm:block w-px h-5 bg-gray-200 mx-1"></div>
+        <AdvancedMultipliers />
+      </div>
+    </div>
+  );
+}
+```
+
+## File: src/index.css
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-secondary: #000;
+}
+
+@layer utilities {
+  .hide-arrows::-webkit-outer-spin-button,
+  .hide-arrows::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .hide-arrows {
+    -moz-appearance: textfield;
+  }
+}
+```
+
+## File: index.html
+```html
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Levytate</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
+```
+
+## File: package.json
+```json
+{
+  "name": "react-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.29.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^6.2.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
+```
+
 ## File: src/components/CloudCalculator.tsx
 ```typescript
 import React, { useState } from 'react';
@@ -662,8 +867,10 @@ import { InputGroup } from './ui/InputGroup';
 import { Checkbox } from './ui/Checkbox';
 import { formatNum } from '../utils/formatters';
 import { GCP, AWS, FS } from '../utils/constants';
+import { Switch } from './ui/Switch';
 
 export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -802,18 +1009,20 @@ export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
   const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(total_backend_cost_usd);
-  }, [total_backend_cost_usd, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? total_backend_cost_usd : 0);
+  }, [total_backend_cost_usd, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">Backend Infrastructure</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>Backend Infrastructure</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6 flex-grow">
-        {/* Cloud Provider Selector */}
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
+          {/* Cloud Provider Selector */}
         <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
           <button 
             onClick={() => setComputeProvider('gcp')} 
@@ -980,109 +1189,6 @@ export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-```
-
-## File: src/components/GlobalDashboard.tsx
-```typescript
-import React, { useState } from 'react';
-import { Settings2, Database, MessageCircle, X } from 'lucide-react';
-import { useGlobalStore } from '../store/useGlobalStore';
-
-function CompactInput({ value, onChange }: any) {
-  return (
-    <input 
-      type="number" 
-      value={value === 0 ? '' : value} 
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-      className="w-16 px-1 py-0.5 text-right font-medium text-gray-900 bg-transparent border-b border-dashed border-gray-400 focus:border-gray-900 focus:outline-none hover:border-gray-900 hide-arrows transition-colors"
-    />
-  );
-}
-
-function AdvancedMultipliers() {
-  const globalStore = useGlobalStore();
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-center p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
-        title="Advanced Traffic Multipliers"
-      >
-        <Settings2 className="w-4 h-4" />
-      </button>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Traffic Multipliers</h3>
-              <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-700">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1 border-b pb-1">
-                   <Database className="w-3 h-3" /> Cloud & Data
-                </div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">DB Reads</span><CompactInput value={globalStore.databaseReadsWritesPerTransaction.reads} onChange={(v: number) => globalStore.setDatabaseOperations('reads', v)} /></div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">DB Writes</span><CompactInput value={globalStore.databaseReadsWritesPerTransaction.writes} onChange={(v: number) => globalStore.setDatabaseOperations('writes', v)} /></div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Egress MB</span><CompactInput value={globalStore.networkEgressMBPerTransaction} onChange={globalStore.setNetworkEgressMB} /></div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-gray-700 flex items-center gap-1 mb-1 border-b pb-1">
-                   <MessageCircle className="w-3 h-3" /> WhatsApp
-                </div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Utility</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.utilityTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('utilityTemplates', v)} /></div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Marketing</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.marketingTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('marketingTemplates', v)} /></div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Auth</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.authenticationTemplates} onChange={(v: number) => globalStore.setWhatsappMessages('authenticationTemplates', v)} /></div>
-                <div className="flex justify-between items-center text-xs text-gray-600"><span className="text-gray-500">Free Replies</span><CompactInput value={globalStore.whatsappMessagesPerTransaction.freeReplies} onChange={(v: number) => globalStore.setWhatsappMessages('freeReplies', v)} /></div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-export default function GlobalDashboard({ children }: any) {
-  const globalStore = useGlobalStore();
-
-  return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm overflow-visible flex items-center justify-between p-3 px-5 mb-6 col-span-full sticky top-[72px] z-20">
-      <div className="flex flex-col lg:flex-row lg:items-center space-y-2 lg:space-y-0 lg:space-x-8">
-        <h2 className="text-base font-bold text-gray-900 tracking-tight whitespace-nowrap">Global Assumptions</h2>
-        
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <div className="flex items-center text-gray-600">
-            <span className="mr-2">Monthly Active Users:</span>
-            <CompactInput value={globalStore.monthlyActiveUsers} onChange={globalStore.setMonthlyActiveUsers} />
-          </div>
-          
-          <div className="flex items-center text-gray-600">
-            <span className="mr-2">Txns per User/Month:</span>
-            <CompactInput value={globalStore.transactionsPerUserMonthly} onChange={globalStore.setTransactionsPerUserMonthly} />
-          </div>
-          
-          <div className="flex items-center text-gray-600">
-            <span className="mr-2">Average Cart Value:</span>
-            <CompactInput value={globalStore.averageCartValue} onChange={globalStore.setAverageCartValue} />
-            <span className="ml-1 text-gray-400">₦</span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex items-center space-x-3">
-        {children}
-        <div className="hidden sm:block w-px h-5 bg-gray-200 mx-1"></div>
-        <AdvancedMultipliers />
       </div>
     </div>
   );
@@ -1097,8 +1203,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { InputGroup } from './ui/InputGroup';
+import { Switch } from './ui/Switch';
 
 export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -1174,17 +1282,19 @@ export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
   const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
   const currentCost = gatewayProvider === 'paystack' ? paystackMonthlyCost : flutterwaveMonthlyCost;
   React.useEffect(() => {
-    if (onCostChange) onCostChange(currentCost);
-  }, [currentCost, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? currentCost : 0);
+  }, [currentCost, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm overflow-hidden flex flex-col transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">Payment Gateway</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>Payment Gateway</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6">
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6">
         {/* Gateway Selector */}
         <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
           <button 
@@ -1348,6 +1458,7 @@ export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
         )}
       </div>
 
+      </div>
     </div>
   );
 }
@@ -1361,8 +1472,10 @@ import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
 import { WA_RATES } from '../utils/constants';
+import { Switch } from './ui/Switch';
 
 export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -1430,17 +1543,19 @@ export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) 
   const totalWaCostUsd = waMarketingCostUsd + waAuthCostUsd + waServiceCostUsd + waUtilityCostUsd;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(totalWaCostUsd);
-  }, [totalWaCostUsd, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? totalWaCostUsd : 0);
+  }, [totalWaCostUsd, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">WhatsApp API</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>WhatsApp API</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6 flex-grow">
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
         
         {/* Sync Controls */}
         <div className="flex items-center justify-between mb-2">
@@ -1559,68 +1674,9 @@ export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) 
           </div>
         </div>
       </div>
+      </div>
     </div>
   );
-}
-```
-
-## File: src/index.css
-```css
-@import "tailwindcss";
-
-@theme {
-  --color-secondary: #000;
-}
-
-@layer utilities {
-  .hide-arrows::-webkit-outer-spin-button,
-  .hide-arrows::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  .hide-arrows {
-    -moz-appearance: textfield;
-  }
-}
-```
-
-## File: package.json
-```json
-{
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@google/genai": "^1.29.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "vite": "^6.2.0",
-    "zustand": "^5.0.12"
-  },
-  "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
-  }
 }
 ```
 
@@ -1691,9 +1747,9 @@ export default function App() {
     }
   };
 
-  const totalMonthlyNGN = costs.paymentNGN + 
-    (costs.cloudUSD * usdToNgnRate) + 
-    (costs.whatsappUSD * usdToNgnRate) + 
+  const totalMonthlyNGN = costs.paymentNGN +
+    (costs.cloudUSD * usdToNgnRate) +
+    (costs.whatsappUSD * usdToNgnRate) +
     getPayoutCostInNGN(costs.payoutNative, costs.payoutCountry, usdToNgnRate);
 
   const formatterNGN = (amount: number) => formatNGNBase(amount, displayCurrency, usdToNgnRate);
@@ -1707,36 +1763,36 @@ export default function App() {
             <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center shadow-sm">
               <Calculator className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight hidden sm:block">Levytate</span>
+            <span className="text-xl font-bold tracking-tight hidden sm:block">Levytate UpStack</span>
           </div>
-          
+
           <div className="flex items-center space-x-4">
-             {/* Small inline Input for Exchange Rate implicitly handled */}
-             <div className="flex items-center gap-2 mr-2">
-                <span className="text-xs text-gray-500 font-medium">USD to NGN:</span>
-                <input 
-                  type="number" 
-                  value={usdToNgnRate || ''} 
-                  onChange={(e) => setUsdToNgnRate(parseFloat(e.target.value) || 0)}
-                  className="w-16 px-1.5 py-0.5 text-right font-medium text-xs text-gray-900 border border-gray-200 rounded focus:border-gray-900 focus:outline-none hide-arrows transition-colors"
-                />
-             </div>
+            {/* Small inline Input for Exchange Rate implicitly handled */}
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-xs text-gray-500 font-medium">USD to NGN:</span>
+              <input
+                type="number"
+                value={usdToNgnRate || ''}
+                onChange={(e) => setUsdToNgnRate(parseFloat(e.target.value) || 0)}
+                className="w-16 px-1.5 py-0.5 text-right font-medium text-xs text-gray-900 border border-gray-200 rounded focus:border-gray-900 focus:outline-none hide-arrows transition-colors"
+              />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 items-start">
-          
+
           <GlobalDashboard>
             <div className="flex bg-gray-100/80 p-0.5 rounded-lg border border-gray-200 shadow-sm">
-              <button 
+              <button
                 onClick={() => setDisplayCurrency('NGN')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'NGN' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 NGN
               </button>
-              <button 
+              <button
                 onClick={() => setDisplayCurrency('USD')}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${displayCurrency === 'USD' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
               >
@@ -1745,23 +1801,23 @@ export default function App() {
             </div>
           </GlobalDashboard>
 
-          <PaymentCalculator 
-            formatterNGN={formatterNGN} 
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, paymentNGN: cost || 0 }))} 
-          />
-          
-          <PayoutCalculator 
-            onCostChange={(cost: number, country: string) => setCosts(prev => ({ ...prev, payoutNative: cost || 0, payoutCountry: country }))} 
-          />
-          
-          <CloudCalculator 
-            formatterUSD={formatterUSD} 
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, cloudUSD: cost || 0 }))} 
+          <PaymentCalculator
+            formatterNGN={formatterNGN}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, paymentNGN: cost || 0 }))}
           />
 
-          <WhatsAppCalculator 
-            formatterUSD={formatterUSD} 
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, whatsappUSD: cost || 0 }))} 
+          <PayoutCalculator
+            onCostChange={(cost: number, country: string) => setCosts(prev => ({ ...prev, payoutNative: cost || 0, payoutCountry: country }))}
+          />
+
+          <CloudCalculator
+            formatterUSD={formatterUSD}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, cloudUSD: cost || 0 }))}
+          />
+
+          <WhatsAppCalculator
+            formatterUSD={formatterUSD}
+            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, whatsappUSD: cost || 0 }))}
           />
 
         </div>
@@ -1769,18 +1825,18 @@ export default function App() {
 
       <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 text-white shadow-[0_-10px_30px_rgba(0,0,0,0.15)] z-40">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between">
-           <div className="flex items-center gap-4">
-              <div className="hidden sm:flex w-10 h-10 bg-indigo-500/20 border border-indigo-500/30 rounded-xl items-center justify-center shadow-inner">
-                 <Calculator className="w-5 h-5 text-indigo-300" />
-              </div>
-              <div className="text-center sm:text-left">
-                <h3 className="text-sm font-bold text-gray-200">Total Estimated Monthly Cost</h3>
-                <p className="text-xs text-gray-400">Aggregated sum of all platform charges</p>
-              </div>
-           </div>
-           <div className="mt-2 sm:mt-0 text-center sm:text-right">
-             <div className="text-2xl font-black text-white tracking-tight">{formatterNGN(totalMonthlyNGN)} <span className="text-gray-400 text-sm font-medium">/mo</span></div>
-           </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex w-10 h-10 bg-indigo-500/20 border border-indigo-500/30 rounded-xl items-center justify-center shadow-inner">
+              <Calculator className="w-5 h-5 text-indigo-300" />
+            </div>
+            <div className="text-center sm:text-left">
+              <h3 className="text-sm font-bold text-gray-200">Total Estimated Monthly Cost</h3>
+              <p className="text-xs text-gray-400">Aggregated sum of all platform charges</p>
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-0 text-center sm:text-right">
+            <div className="text-2xl font-black text-white tracking-tight">{formatterNGN(totalMonthlyNGN)} <span className="text-gray-400 text-sm font-medium">/mo</span></div>
+          </div>
         </div>
       </div>
     </div>

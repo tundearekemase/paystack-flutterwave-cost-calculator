@@ -7,8 +7,10 @@ import { InputGroup } from './ui/InputGroup';
 import { Checkbox } from './ui/Checkbox';
 import { formatNum } from '../utils/formatters';
 import { GCP, AWS, FS } from '../utils/constants';
+import { Switch } from './ui/Switch';
 
 export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -147,18 +149,20 @@ export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
   const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(total_backend_cost_usd);
-  }, [total_backend_cost_usd, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? total_backend_cost_usd : 0);
+  }, [total_backend_cost_usd, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-0">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">Backend Infrastructure</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>Backend Infrastructure</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6 flex-grow">
-        {/* Cloud Provider Selector */}
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6 flex-grow">
+          {/* Cloud Provider Selector */}
         <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
           <button 
             onClick={() => setComputeProvider('gcp')} 
@@ -324,6 +328,7 @@ export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
             <Zap className="w-5 h-5 text-indigo-400" />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

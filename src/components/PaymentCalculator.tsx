@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { InputGroup } from './ui/InputGroup';
+import { Switch } from './ui/Switch';
 
 export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
+  const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
   const [useGlobal, setUseGlobal] = useState(true);
 
@@ -81,17 +83,19 @@ export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
   const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
   const currentCost = gatewayProvider === 'paystack' ? paystackMonthlyCost : flutterwaveMonthlyCost;
   React.useEffect(() => {
-    if (onCostChange) onCostChange(currentCost);
-  }, [currentCost, onCostChange]);
+    if (onCostChange) onCostChange(enabled ? currentCost : 0);
+  }, [currentCost, enabled, onCostChange]);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+    <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm overflow-hidden flex flex-col transition-all duration-300`}>
       {/* Header */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-        <h2 className="text-lg font-bold tracking-tight text-gray-900">Payment Gateway</h2>
+      <div className={`p-5 border-b border-gray-100 flex items-center justify-between transition-colors duration-300 ${enabled ? 'bg-gray-50/50' : 'bg-gray-50/20'}`}>
+        <h2 className={`text-lg font-bold tracking-tight transition-colors duration-300 ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>Payment Gateway</h2>
+        <Switch checked={enabled} onChange={setEnabled} />
       </div>
 
-      <div className="p-5 space-y-6">
+      <div className={`flex flex-col grow transition-all duration-300 ${enabled ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
+        <div className="p-5 space-y-6">
         {/* Gateway Selector */}
         <div className="flex rounded-lg bg-gray-100 p-1 w-full border border-gray-200/50 shadow-inner">
           <button 
@@ -255,6 +259,7 @@ export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
         )}
       </div>
 
+      </div>
     </div>
   );
 }
