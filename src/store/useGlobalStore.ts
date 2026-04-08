@@ -15,6 +15,16 @@ interface GlobalState {
     writes: number;
   };
   networkEgressMBPerTransaction: number;
+
+  displayCurrency: 'NGN' | 'USD';
+  usdToNgnRate: number;
+  costs: {
+    paymentNGN: number;
+    cloudUSD: number;
+    whatsappUSD: number;
+    payoutNative: number;
+    payoutCountry: string;
+  };
   
   // Actions
   setMonthlyActiveUsers: (val: number) => void;
@@ -23,6 +33,9 @@ interface GlobalState {
   setNetworkEgressMB: (val: number) => void;
   setWhatsappMessages: (key: keyof GlobalState['whatsappMessagesPerTransaction'], val: number) => void;
   setDatabaseOperations: (key: keyof GlobalState['databaseReadsWritesPerTransaction'], val: number) => void;
+  setDisplayCurrency: (val: 'NGN' | 'USD') => void;
+  setUsdToNgnRate: (val: number) => void;
+  setCosts: (key: keyof GlobalState['costs'], val: any) => void;
 }
 
 export const useGlobalStore = create<GlobalState>((set) => ({
@@ -41,6 +54,16 @@ export const useGlobalStore = create<GlobalState>((set) => ({
   },
   networkEgressMBPerTransaction: 1.5,
 
+  displayCurrency: 'NGN',
+  usdToNgnRate: 1500,
+  costs: {
+    paymentNGN: 0,
+    cloudUSD: 0,
+    whatsappUSD: 0,
+    payoutNative: 0,
+    payoutCountry: 'NG',
+  },
+
   setMonthlyActiveUsers: (val) => set({ monthlyActiveUsers: val }),
   setTransactionsPerUserMonthly: (val) => set({ transactionsPerUserMonthly: val }),
   setAverageCartValue: (val) => set({ averageCartValue: val }),
@@ -56,6 +79,15 @@ export const useGlobalStore = create<GlobalState>((set) => ({
     set((state) => ({
       databaseReadsWritesPerTransaction: {
         ...state.databaseReadsWritesPerTransaction,
+        [key]: val,
+      },
+    })),
+  setDisplayCurrency: (val) => set({ displayCurrency: val }),
+  setUsdToNgnRate: (val) => set({ usdToNgnRate: val }),
+  setCosts: (key, val) => 
+    set((state) => ({
+      costs: {
+        ...state.costs,
         [key]: val,
       },
     })),

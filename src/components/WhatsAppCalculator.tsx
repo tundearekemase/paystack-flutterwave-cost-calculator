@@ -5,10 +5,12 @@ import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
 import { WA_RATES } from '../utils/constants';
 import { Switch } from './ui/Switch';
+import { calculateWhatsAppCost } from '../utils/calculations';
 
-export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) {
+export default function WhatsAppCalculator({ formatterUSD }: any) {
   const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
+  const setCosts = useGlobalStore(state => state.setCosts);
   const [useGlobal, setUseGlobal] = useState(true);
 
   const [waTargetCountry, setWaTargetCountry] = useState('NGA');
@@ -35,48 +37,17 @@ export default function WhatsAppCalculator({ formatterUSD, onCostChange }: any) 
   const waAuthMsgs = useGlobal ? (globalStore.whatsappMessagesPerTransaction.authenticationTemplates * globalStore.transactionsPerUserMonthly) : localWaAuthMsgs;
   const waUserRequests = useGlobal ? (globalStore.whatsappMessagesPerTransaction.freeReplies * globalStore.transactionsPerUserMonthly) : localWaUserRequests;
 
-  // --- CALCULATIONS ---
-  const currentWaRate = WA_RATES[waTargetCountry];
-  
-  // Marketing
-  const totalMarketingMessages = users * waMarketingMsgs;
-  const waMarketingCostUsd = totalMarketingMessages * currentWaRate.marketing;
-  
-  // Authentication
-  const totalAuthMessages = users * waAuthMsgs;
-  const waAuthCostUsd = totalAuthMessages * currentWaRate.authentication;
-
-  // Service
-  const totalServiceRequests = users * waUserRequests;
-  const waServiceCostUsd = 0; // User-initiated replies within 24h are free
-
-  // Utility
-  const totalUtilityMessages = users * waUtilityMsgs;
-  const freeUtilityMessages = totalUtilityMessages * (inputs.waUtilityInsideWindowPercent / 100);
-  const chargeableUtilityMessages = Math.max(0, totalUtilityMessages - freeUtilityMessages);
-
-  let waUtilityCostUsd = 0;
-  let remainingChargeable = chargeableUtilityMessages;
-  
-  if (remainingChargeable > 0) {
-    const tier1 = Math.min(100000, remainingChargeable);
-    waUtilityCostUsd += tier1 * currentWaRate.utility;
-    remainingChargeable -= tier1;
-  }
-  if (remainingChargeable > 0) {
-    const tier2 = Math.min(400000, remainingChargeable);
-    waUtilityCostUsd += tier2 * (currentWaRate.utility * 0.95);
-    remainingChargeable -= tier2;
-  }
-  if (remainingChargeable > 0) {
-    waUtilityCostUsd += remainingChargeable * (currentWaRate.utility * 0.90);
-  }
-
-  const totalWaCostUsd = waMarketingCostUsd + waAuthCostUsd + waServiceCostUsd + waUtilityCostUsd;
+  const { 
+    waMarketingCostUsd, waAuthCostUsd, waServiceCostUsd, waUtilityCostUsd, 
+    totalCost: totalWaCostUsd 
+  } = calculateWhatsAppCost({
+    waTargetCountry, users, waMarketingMsgs, waUtilityMsgs,
+    waAuthMsgs, waUserRequests, waUtilityInsideWindowPercent: inputs.waUtilityInsideWindowPercent
+  });
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(enabled ? totalWaCostUsd : 0);
-  }, [totalWaCostUsd, enabled, onCostChange]);
+    setCosts('whatsappUSD', enabled ? totalWaCostUsd : 0);
+  }, [totalWaCostUsd, enabled, setCosts]);
 
   return (
     <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>

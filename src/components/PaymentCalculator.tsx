@@ -5,10 +5,12 @@ import { useGlobalStore } from '../store/useGlobalStore';
 import { SliderInput } from './ui/SliderInput';
 import { InputGroup } from './ui/InputGroup';
 import { Switch } from './ui/Switch';
+import { calculatePaymentCost } from '../utils/calculations';
 
-export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
+export default function PaymentCalculator({ formatterNGN }: any) {
   const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
+  const setCosts = useGlobalStore(state => state.setCosts);
   const [useGlobal, setUseGlobal] = useState(true);
 
   const [feeBearer, setFeeBearer] = useState<'merchant' | 'customer'>('merchant');
@@ -37,54 +39,22 @@ export default function PaymentCalculator({ formatterNGN, onCostChange }: any) {
   const price = useGlobal ? globalStore.averageCartValue : localPrice;
   const txnsPerMonth = useGlobal ? globalStore.transactionsPerUserMonthly : localTxnsPerMonth;
 
-  // --- FINTECH CALCULATIONS ---
-  const totalMonthlyTxns = users * txnsPerMonth;
+  const { 
+    paystackMonthlyCost, paystackProcessingFee, 
+    flutterwaveMonthlyCost, flutterwaveProcessingFee, 
+    totalCost 
+  } = calculatePaymentCost({
+    gatewayProvider, feeBearer, price, users, txnsPerMonth,
+    ...inputs
+  });
 
-  // Paystack
-  const paystackDecimalRate = inputs.paystackPercentage / 100;
-  const paystackFlatFee = price >= inputs.paystackFlatThreshold ? inputs.paystackFlatAmount : 0;
-
-  let paystackProcessingFee: number;
-
-  if (feeBearer === 'merchant') {
-    const calculatedFee = price * paystackDecimalRate + paystackFlatFee;
-    paystackProcessingFee = Math.min(calculatedFee, inputs.paystackCap);
-  } else {
-    const uncappedCharge = (price + paystackFlatFee) / (1 - paystackDecimalRate);
-    const uncappedFee = uncappedCharge - price;
-    if (uncappedFee > inputs.paystackCap) {
-      paystackProcessingFee = inputs.paystackCap;
-    } else {
-      paystackProcessingFee = Math.round(uncappedFee * 100) / 100;
-    }
-  }
   const paystackTotalPerTxn = paystackProcessingFee;
-  const paystackMonthlyCost = paystackTotalPerTxn * totalMonthlyTxns;
-
-  // Flutterwave
-  const flutterwaveDecimalRate = inputs.flutterwavePercentage / 100;
-
-  let flutterwaveProcessingFee: number;
-
-  if (feeBearer === 'merchant') {
-    const calculatedFee = price * flutterwaveDecimalRate;
-    flutterwaveProcessingFee = Math.min(calculatedFee, inputs.flutterwaveCap);
-  } else {
-    const uncappedCharge = price / (1 - flutterwaveDecimalRate);
-    const uncappedFee = uncappedCharge - price;
-
-    if (uncappedFee > inputs.flutterwaveCap) {
-      flutterwaveProcessingFee = inputs.flutterwaveCap;
-    } else {
-      flutterwaveProcessingFee = Math.round(uncappedFee * 100) / 100;
-    }
-  }
   const flutterwaveTotalPerTxn = flutterwaveProcessingFee;
-  const flutterwaveMonthlyCost = flutterwaveTotalPerTxn * totalMonthlyTxns;
-  const currentCost = gatewayProvider === 'paystack' ? paystackMonthlyCost : flutterwaveMonthlyCost;
+  const currentCost = totalCost;
+
   React.useEffect(() => {
-    if (onCostChange) onCostChange(enabled ? currentCost : 0);
-  }, [currentCost, enabled, onCostChange]);
+    setCosts('paymentNGN', enabled ? currentCost : 0);
+  }, [currentCost, enabled, setCosts]);
 
   return (
     <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm overflow-hidden flex flex-col transition-all duration-300`}>

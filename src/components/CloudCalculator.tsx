@@ -8,10 +8,12 @@ import { Checkbox } from './ui/Checkbox';
 import { formatNum } from '../utils/formatters';
 import { GCP, AWS, FS } from '../utils/constants';
 import { Switch } from './ui/Switch';
+import { calculateCloudCost } from '../utils/calculations';
 
-export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
+export default function CloudCalculator({ formatterUSD }: any) {
   const [enabled, setEnabled] = useState(true);
   const globalStore = useGlobalStore();
+  const setCosts = useGlobalStore(state => state.setCosts);
   const [useGlobal, setUseGlobal] = useState(true);
 
   const [showCloudAdvanced, setShowCloudAdvanced] = useState(false);
@@ -64,93 +66,23 @@ export default function CloudCalculator({ formatterUSD, onCostChange }: any) {
   const firestoreWritesReq = useGlobal ? globalStore.databaseReadsWritesPerTransaction.writes : localFirestoreWritesReq;
   const totalMonthlyTxns = users * globalStore.transactionsPerUserMonthly;
 
-  // --- TRAFFIC ---
-  const totalMonthlyUsers = users;
-  const totalMonthlyBackendReqs = totalMonthlyUsers * requestsPerUserMonth;
-  const t_sec = inputs.backendRequestTimeMs / 1000;
-  // Network Egress based on global MB setting per transaction
-  const total_egress_gib = (totalMonthlyTxns * globalStore.networkEgressMBPerTransaction) / 1024;
-
-  // --- GCP CLOUD RUN ---
-  const cr_billable_reqs = Math.max(0, totalMonthlyBackendReqs - GCP.CR_FREE_REQS);
-  const cr_req_cost = (cr_billable_reqs / 1000000) * GCP.CR_PRICE_PER_M_REQS;
-
-  const cr_total_compute_sec = (totalMonthlyBackendReqs * t_sec) / (inputs.cloudRunConcurrency || 1);
-
-  const cr_billable_vcpu_sec = Math.max(0, (cr_total_compute_sec * inputs.cloudRunVcpu) - GCP.CR_FREE_VCPU_SEC);
-  const cr_vcpu_cost = cr_billable_vcpu_sec * GCP.CR_PRICE_VCPU_SEC;
-
-  const cr_billable_mem_sec = Math.max(0, (cr_total_compute_sec * inputs.cloudRunMemGib) - GCP.CR_FREE_MEM_SEC);
-  const cr_mem_cost = cr_billable_mem_sec * GCP.CR_PRICE_MEM_SEC;
-
-  const cr_billable_egress = Math.max(0, total_egress_gib - GCP.FREE_EGRESS_GIB);
-  const cr_egress_cost = cr_billable_egress * GCP.PRICE_EGRESS_GIB;
-
-  const SECONDS_PER_MONTH = 2592000;
-  const cr_idle_vcpu_cost = inputs.minInstances * inputs.cloudRunVcpu * SECONDS_PER_MONTH * GCP.CR_IDLE_PRICE_VCPU_SEC;
-  const cr_idle_mem_cost = inputs.minInstances * inputs.cloudRunMemGib * SECONDS_PER_MONTH * GCP.CR_IDLE_PRICE_MEM_SEC;
-  const cr_idle_cost = cr_idle_vcpu_cost + cr_idle_mem_cost;
-
-  const total_gcp_compute_cost = cr_req_cost + cr_vcpu_cost + cr_mem_cost + cr_egress_cost + cr_idle_cost;
-
-  // --- AWS ECS FARGATE ---
-  const ecsActiveInstanceRate = (inputs.ecsFargateVcpu * AWS.FARGATE_VCPU_RATE) + (inputs.ecsFargateMemGb * AWS.FARGATE_MEM_RATE);
+  const {
+    cr_req_cost, cr_vcpu_cost, cr_mem_cost, cr_egress_cost, cr_idle_cost, total_gcp_compute_cost,
+    awsComputeCost, awsEgressCost, awsVpcCost, awsDeployCost, awsLoggingCost, total_aws_compute_cost,
+    fs_reads_cost, fs_writes_cost, fs_storage_cost, total_firestore_cost_usd,
+    totalCost: total_backend_cost_usd
+  } = calculateCloudCost({
+    computeProvider, firestoreEdition, awsRequireVpcNat, awsAutomatedDeployments,
+    users, requestsPerUserMonth, firestoreReadsReq, firestoreWritesReq, totalMonthlyTxns, 
+    networkEgressMBPerTransaction: globalStore.networkEgressMBPerTransaction,
+    ...inputs
+  });
   
-  const totalFargateComputeHoursRequired = (totalMonthlyBackendReqs * t_sec) / 3600;
-  const ecsTaskConcurrency = inputs.ecsTaskConcurrencyLimit || 1;
-  const totalTaskHoursNeeded = totalFargateComputeHoursRequired / ecsTaskConcurrency;
-  
-  const expectedTaskHours = Math.max(inputs.ecsMinTasks * 720, totalTaskHoursNeeded);
-  const awsComputeCost = expectedTaskHours * ecsActiveInstanceRate;
-  
-  const awsBaselineCost = Math.min(awsComputeCost, inputs.ecsMinTasks * 720 * ecsActiveInstanceRate);
-  const awsPeakCost = awsComputeCost - awsBaselineCost;
-
-  const awsBillableEgress = Math.max(0, total_egress_gib - AWS.EGRESS_FREE_GB);
-  const awsEgressCost = awsBillableEgress * AWS.EGRESS_RATE;
-  
-  const awsVpcCost = awsRequireVpcNat ? (AWS.NAT_GATEWAY_FLAT + (total_egress_gib * AWS.NAT_GATEWAY_DATA)) : 0;
-  const awsDeployCost = awsAutomatedDeployments ? AWS.ECS_DEPLOY_TOTAL : 0;
-  const awsLoggingCost = inputs.awsCloudWatchLogsGb * AWS.CLOUDWATCH_RATE;
-
-  const total_aws_compute_cost = awsComputeCost + awsEgressCost + awsVpcCost + awsDeployCost + awsLoggingCost;
-  const compute_subtotal_usd = computeProvider === 'gcp' ? total_gcp_compute_cost : total_aws_compute_cost;
-
-  // --- FIRESTORE ---
-  const total_reads = totalMonthlyBackendReqs * firestoreReadsReq;
-  const total_writes = totalMonthlyBackendReqs * firestoreWritesReq;
-  const total_storage_gib = (totalMonthlyUsers * inputs.firestoreStorageMb) / 1024;
-
-  let fs_reads_cost = 0;
-  let fs_writes_cost = 0;
-  let fs_storage_cost = 0;
-
-  if (firestoreEdition === 'standard') {
-    const fs_billable_reads = Math.max(0, total_reads - inputs.firestoreStandardFreeReadsMo);
-    fs_reads_cost = (fs_billable_reads / 100000) * FS.PRICE_PER_100K_READS;
-
-    const fs_billable_writes = Math.max(0, total_writes - inputs.firestoreStandardFreeWritesMo);
-    fs_writes_cost = (fs_billable_writes / 100000) * FS.PRICE_PER_100K_WRITES;
-
-    const fs_billable_storage = Math.max(0, total_storage_gib - inputs.firestoreStandardFreeStorageGib);
-    fs_storage_cost = fs_billable_storage * FS.PRICE_STORAGE_GIB;
-  } else {
-    const fs_billable_reads_mil = Math.max(0, (total_reads / 1000000) - inputs.firestoreEnterpriseFreeReadsMillion);
-    fs_reads_cost = fs_billable_reads_mil * FS.ENT_PRICE_READS_MILLION;
-
-    const fs_billable_writes_mil = Math.max(0, (total_writes / 1000000) - inputs.firestoreEnterpriseFreeWritesMillion);
-    fs_writes_cost = fs_billable_writes_mil * FS.ENT_PRICE_WRITES_MILLION;
-
-    const fs_billable_storage = Math.max(0, total_storage_gib - inputs.firestoreEnterpriseFreeStorageGib);
-    fs_storage_cost = fs_billable_storage * FS.ENT_PRICE_STORAGE_GIB;
-  }
-
-  const total_firestore_cost_usd = fs_reads_cost + fs_writes_cost + fs_storage_cost;
-  const total_backend_cost_usd = compute_subtotal_usd + total_firestore_cost_usd;
+  const totalMonthlyBackendReqs = users * requestsPerUserMonth;
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(enabled ? total_backend_cost_usd : 0);
-  }, [total_backend_cost_usd, enabled, onCostChange]);
+    setCosts('cloudUSD', enabled ? total_backend_cost_usd : 0);
+  }, [total_backend_cost_usd, enabled, setCosts]);
 
   return (
     <div className={`bg-white rounded-2xl border ${enabled ? 'border-gray-200' : 'border-gray-100'} shadow-sm flex flex-col min-h-0 transition-all duration-300`}>

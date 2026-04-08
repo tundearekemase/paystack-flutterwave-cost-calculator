@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calculator } from 'lucide-react';
+import { Calculator, BarChart2 } from 'lucide-react';
 import GlobalDashboard from './components/GlobalDashboard';
 import PaymentCalculator from './components/PaymentCalculator';
 import CloudCalculator from './components/CloudCalculator';
@@ -7,18 +7,19 @@ import WhatsAppCalculator from './components/WhatsAppCalculator';
 import PayoutCalculator from './components/PayoutCalculator';
 import { formatNGNBase, formatUSDBase } from './utils/formatters';
 import { InputGroup } from './components/ui/InputGroup';
+import { useGlobalStore } from './store/useGlobalStore';
+import ReportingDrawer from './components/ReportingDrawer';
 
 export default function App() {
-  const [displayCurrency, setDisplayCurrency] = useState<'NGN' | 'USD'>('NGN');
-  const [usdToNgnRate, setUsdToNgnRate] = useState(1500);
+  const displayCurrency = useGlobalStore(state => state.displayCurrency);
+  const setDisplayCurrency = useGlobalStore(state => state.setDisplayCurrency);
+  const usdToNgnRate = useGlobalStore(state => state.usdToNgnRate);
+  const setUsdToNgnRate = useGlobalStore(state => state.setUsdToNgnRate);
+  const costs = useGlobalStore(state => state.costs);
+  
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const [costs, setCosts] = useState({
-    paymentNGN: 0,
-    cloudUSD: 0,
-    whatsappUSD: 0,
-    payoutNative: 0,
-    payoutCountry: 'NG',
-  });
+
 
   const getPayoutCostInNGN = (val: number, country: string, usdRate: number) => {
     switch (country) {
@@ -87,21 +88,16 @@ export default function App() {
 
           <PaymentCalculator
             formatterNGN={formatterNGN}
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, paymentNGN: cost || 0 }))}
           />
 
-          <PayoutCalculator
-            onCostChange={(cost: number, country: string) => setCosts(prev => ({ ...prev, payoutNative: cost || 0, payoutCountry: country }))}
-          />
+          <PayoutCalculator />
 
           <CloudCalculator
             formatterUSD={formatterUSD}
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, cloudUSD: cost || 0 }))}
           />
 
           <WhatsAppCalculator
             formatterUSD={formatterUSD}
-            onCostChange={(cost: number) => setCosts(prev => ({ ...prev, whatsappUSD: cost || 0 }))}
           />
 
         </div>
@@ -110,9 +106,12 @@ export default function App() {
       <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 text-white shadow-[0_-10px_30px_rgba(0,0,0,0.15)] z-40">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex w-10 h-10 bg-indigo-500/20 border border-indigo-500/30 rounded-xl items-center justify-center shadow-inner">
-              <Calculator className="w-5 h-5 text-indigo-300" />
-            </div>
+            <button 
+              onClick={() => setIsDrawerOpen(!isDrawerOpen)} 
+              className={`flex w-10 h-10 ${isDrawerOpen ? 'bg-indigo-500/40' : 'bg-indigo-500/20'} hover:bg-indigo-500/40 border border-indigo-500/30 rounded-xl items-center justify-center shadow-inner transition-colors`}
+            >
+              <BarChart2 className="w-5 h-5 text-indigo-300" />
+            </button>
             <div className="text-center sm:text-left">
               <h3 className="text-sm font-bold text-gray-200">Total Estimated Monthly Cost</h3>
               <p className="text-xs text-gray-400">Aggregated sum of all platform charges</p>
@@ -123,6 +122,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      <ReportingDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
     </div>
   );
 }

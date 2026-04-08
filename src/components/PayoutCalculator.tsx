@@ -3,8 +3,12 @@ import { Send } from 'lucide-react';
 import { SliderInput } from './ui/SliderInput';
 import { formatNum } from '../utils/formatters';
 import { Switch } from './ui/Switch';
+import { calculatePayoutCost } from '../utils/calculations';
+import { useGlobalStore } from '../store/useGlobalStore';
 
-export default function PayoutCalculator({ onCostChange }: any) {
+export default function PayoutCalculator() {
+  const globalStore = useGlobalStore();
+  const setCosts = useGlobalStore(state => state.setCosts);
   const [enabled, setEnabled] = useState(true);
   const [gatewayProvider, setGatewayProvider] = useState<'paystack' | 'flutterwave'>('paystack');
   const [country, setCountry] = useState<'NG' | 'GH' | 'KE' | 'ZA' | 'INTL'>('NG');
@@ -23,67 +27,18 @@ export default function PayoutCalculator({ onCostChange }: any) {
     else if (country === 'INTL') setTransferAmount(500);
   }, [country]);
 
-  // calculations
-  let fee = 0;
-  let taxes = 0;
-  let currencyStr = 'NGN';
-  let isSupported = true;
-
-  switch (country) {
-    case 'NG':
-      currencyStr = '₦';
-      if (transferAmount <= 5000) fee = 10;
-      else if (transferAmount <= 50000) fee = 25;
-      else fee = 50;
-
-      if (transferAmount >= 10000) taxes = 50;
-      break;
-
-    case 'GH':
-      currencyStr = 'GH₵';
-      if (gatewayProvider === 'paystack') {
-        fee = destination === 'mobile' ? 1 : 8;
-      } else {
-        fee = destination === 'mobile' ? (transferAmount * 0.015) : 10;
-      }
-      break;
-
-    case 'KE':
-      currencyStr = 'KES';
-      if (gatewayProvider === 'paystack') {
-        if (transferAmount <= 1500) fee = 20;
-        else if (transferAmount <= 20000) fee = 40;
-        else fee = 60;
-      } else {
-        fee = 100;
-      }
-      break;
-
-    case 'ZA':
-      currencyStr = 'R';
-      if (gatewayProvider === 'paystack') fee = 3;
-      else fee = 10;
-      break;
-
-    case 'INTL':
-      if (gatewayProvider === 'paystack') {
-        isSupported = false;
-      } else {
-        if (intlRegion === 'USA') { fee = 40; currencyStr = '$'; }
-        else if (intlRegion === 'UK') { fee = 35; currencyStr = '£'; }
-        else { fee = 35; currencyStr = '€'; }
-      }
-      break;
-  }
-
-  const totalPerTransfer = fee + taxes;
-  const totalMonthlyCost = totalPerTransfer * numberOfPayouts;
-  const totalAmountSentMonthly = transferAmount * numberOfPayouts;
-  const totalDeductedMonthly = totalAmountSentMonthly + totalMonthlyCost;
+  const { 
+    fee, taxes, currencyStr, isSupported, 
+    totalPerTransfer, totalCost: totalMonthlyCost, totalDeductedMonthly 
+  } = calculatePayoutCost({
+    gatewayProvider, country, destination, intlRegion,
+    transferAmount, numberOfPayouts
+  });
 
   React.useEffect(() => {
-    if (onCostChange) onCostChange(enabled ? totalMonthlyCost : 0, country);
-  }, [totalMonthlyCost, country, enabled, onCostChange]);
+    setCosts('payoutNative', enabled ? totalMonthlyCost : 0);
+    setCosts('payoutCountry', country);
+  }, [totalMonthlyCost, country, enabled, setCosts]);
 
   let maxAmount = 1000000;
   let stepAmount = 100;
